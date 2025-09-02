@@ -1,5 +1,5 @@
 // app/recommendedlist.tsx
-import React, { useLayoutEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 // 导入 useLocalSearchParams 和 useRouter
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -9,7 +9,7 @@ import { useNavigation } from 'expo-router';
 import { useList } from './context/ListContext';
 
 // 辅助函数，用于计算旅行天数
-function getDuration(startDate, endDate) {
+function getDuration(startDate?: string, endDate?: string): number {
   if (!startDate || !endDate) return 0;
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -19,7 +19,7 @@ function getDuration(startDate, endDate) {
 }
 
 
-const ITEMS_BY_PURPOSE = {
+const ITEMS_BY_PURPOSE: Record<string, string[]> = {
   观光: [
     '舒适的步行鞋',
     '相机',
@@ -41,7 +41,7 @@ const ITEMS_BY_PURPOSE = {
   休闲: ['泳衣', '沙滩巾', '墨镜', '休闲服装'],
 };
 
-const BASE_ITEMS = [
+const BASE_ITEMS: string[] = [
   '护照/签证',
   '机票/车票',
   '酒店预订单',
@@ -57,20 +57,46 @@ export default function RecommendedListScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const params = useLocalSearchParams();
-  const { saveList } = useList(); // 使用 useList 钩子
+  const { savedList, saveList } = useList(); // 使用 useList 钩子
 
-  const { destination, startDate, endDate, adults, children, purpose } = params;
+  const { destination, startDate, endDate, adults, children, purpose, checkedItems: incomingChecked } = params as Record<string, string | string[]>;
 
-  const parsedAdults = Number(adults) || 0;
-  const parsedChildren = Number(children) || 0;
-  const duration = getDuration(startDate, endDate);
+  // Normalize possible string[] from URL params to string
+  const norm = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v) as string | undefined;
+  const nDestination = norm(destination);
+  const nStartDate = norm(startDate);
+  const nEndDate = norm(endDate);
+  const nPurpose = norm(purpose);
 
-  const purposeItems = ITEMS_BY_PURPOSE[purpose as string] || [];
-  const recommendedItems = [...BASE_ITEMS, ...purposeItems];
+  const parsedAdults = Number(norm(adults)) || 0;
+  const parsedChildren = Number(norm(children)) || 0;
+  const duration = getDuration(nStartDate, nEndDate);
 
-  const [checkedItems, setCheckedItems] = useState({});
+  const purposeItems = useMemo(() => ITEMS_BY_PURPOSE[nPurpose as string] || [], [nPurpose]);
+  const recommendedItems = useMemo(() => [...BASE_ITEMS, ...purposeItems], [purposeItems]);
 
-  const handleToggleCheck = (item) => {
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+
+  // 如果是从已保存的清单进入编辑，恢复勾选状态
+  useEffect(() => {
+    // 1) ルートパラメータからの復元（優先）
+    if (incomingChecked) {
+      try {
+        const parsed = JSON.parse(Array.isArray(incomingChecked) ? incomingChecked[0] : incomingChecked);
+        if (parsed && typeof parsed === 'object') setCheckedItems(parsed);
+      } catch {}
+    } else if (savedList && savedList.originalParams) {
+      // 只在目的地/目的等相同的情况下恢复，避免跨不同列表污染
+      const sameContext =
+        savedList.originalParams.destination === nDestination &&
+        savedList.originalParams.purpose === nPurpose;
+      if (sameContext && savedList.checkedItems) {
+        setCheckedItems(savedList.checkedItems);
+      }
+    }
+  }, [incomingChecked, nDestination, nPurpose, savedList]);
+
+  const handleToggleCheck = (item: string) => {
     setCheckedItems(prev => ({
       ...prev,
       [item]: !prev[item]
@@ -86,7 +112,7 @@ export default function RecommendedListScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, params, saveList]); // 依赖项中添加 params 和 saveList
+  }, [navigation, params, saveList, checkedItems]); // 保存按钮可见时依赖当前状态
 
   const handleSave = () => {
     // 准备要传递回 home 页面的数据
@@ -98,6 +124,8 @@ export default function RecommendedListScreen() {
       purpose: purpose,
       // 将所有原始参数保存，以便编辑时使用
       originalParams: params,
+      // 勾选状态
+      checkedItems,
       // 可以在这里添加更多你想保存的数据，比如清单名称
       listName: '日本旅行计划' // 示例，你可能需要从 newlist 页面传递过来
     };
@@ -106,7 +134,7 @@ export default function RecommendedListScreen() {
     // 我们将数据作为参数传递给 home 页面
     saveList(listSummary); // 将数据保存到 Context
     // 使用 router.replace() 替换当前页面，直接返回到 home 页面
-    router.replace('/'); 
+  router.replace('/'); 
     // 实际的参数传递，需要通过 context 或全局状态管理
     // router.setParams({ savedList: listSummary });
     // 由于 Expo Router 的 router.back() 不支持直接传参，我们可以在 home 页面监听导航事件或使用全局状态。
@@ -129,11 +157,11 @@ export default function RecommendedListScreen() {
         </Text>
         <Text style={styles.summaryText}>
           <Text style={styles.label}>旅行目的:</Text>
-          {purpose || '未选择'}
+          {nPurpose || '未选择'}
         </Text>
       </View>
       <View style={styles.listContainer}>
-        {recommendedItems.map((item) => (
+  {recommendedItems.map((item: string) => (
           <Pressable
             key={item}
             style={styles.listItem}

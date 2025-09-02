@@ -12,8 +12,8 @@ export default function HomeScreen() {
     // 如果有保存的清单，直接导航到 recommendedlist 页面并传递所有原始参数
     if (savedList) {
       router.push({
-        pathname: 'recommendedlist',
-        params: { ...savedList.originalParams },
+        pathname: '/recommendedlist',
+        params: { ...savedList.originalParams, checkedItems: JSON.stringify(savedList.checkedItems || {}) },
       });
     }
   };

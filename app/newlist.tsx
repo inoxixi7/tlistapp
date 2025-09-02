@@ -44,7 +44,7 @@ export default function NewListScreen() {
   const [purpose, setPurpose] = useState('');
 
   // 这个函数只在原生应用上被调用
-  const onDateChange = (event, selectedDate) => {
+  const onDateChange = (_event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) {
       if (activeDateType === 'start') {
@@ -59,7 +59,7 @@ export default function NewListScreen() {
   const handleSave = () => {
     // 使用 router.push() 导航并传递参数
     router.push({
-      pathname: 'recommendedlist', // 目标页面的路径名
+      pathname: '/recommendedlist', // 目标页面的路径名
       params: {
         destination,
         startDate: startDate.toISOString(), // 将日期转换为字符串以便传递
