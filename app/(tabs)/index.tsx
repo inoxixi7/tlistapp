@@ -98,6 +98,22 @@ export default function HomeScreen() {
                 <Text style={styles.cardInfo}>目的地: {l.destination || '未填写'}</Text>
                 <Text style={styles.cardInfo}>人数: {l.adults}大, {l.children}小</Text>
                 <Text style={styles.cardInfo}>天数: {l.duration}天</Text>
+                {/* 进度条 */}
+                <View style={styles.progressRow}>
+                  {(() => {
+                    const total = Array.isArray(l.items) ? l.items.length : 0;
+                    const done = l.checkedItems ? Object.values(l.checkedItems).filter(Boolean).length : 0;
+                    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+                    return (
+                      <>
+                        <View style={styles.progressBarBg}>
+                          <View style={[styles.progressBarFill, { width: `${percent}%` }]} />
+                        </View>
+                        <Text style={styles.progressText}>{percent}%</Text>
+                      </>
+                    );
+                  })()}
+                </View>
               </Pressable>
             </View>
           ))}
@@ -207,6 +223,28 @@ const styles = StyleSheet.create({
   smallButtonText: {
     color: '#fff',
     fontSize: 14,
+  },
+  progressRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  progressBarBg: {
+    flex: 1,
+    height: 8,
+    backgroundColor: '#eee',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: 'dodgerblue',
+  },
+  progressText: {
+    width: 50,
+    textAlign: 'right',
+    color: '#333',
   },
   createButton: {
     backgroundColor: 'dodgerblue',

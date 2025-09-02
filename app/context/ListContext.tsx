@@ -1,6 +1,6 @@
 // app/context/ListContext.tsx
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 export type TravelList = {
   id: string;
@@ -12,6 +12,8 @@ export type TravelList = {
   purpose?: string;
   originalParams: any;
   checkedItems: Record<string, boolean>;
+  items: string[]; // 快照：用于计算完成进度
+  categories?: Record<string, string[]>; // 分组：用于在页面按分类显示
   createdAt: number;
   updatedAt: number;
 };
@@ -55,6 +57,10 @@ export const ListProvider = ({ children }: { children: React.ReactNode }) => {
             purpose: legacy.purpose,
             originalParams: legacy.originalParams,
             checkedItems: legacy.checkedItems || {},
+            items: Array.isArray(legacy.items) ? legacy.items : [],
+            categories: legacy.categories && typeof legacy.categories === 'object'
+              ? legacy.categories
+              : (Array.isArray(legacy.items) ? { '清单': legacy.items } : undefined),
             createdAt: Date.now(),
             updatedAt: Date.now(),
           };

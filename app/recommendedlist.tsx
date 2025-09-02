@@ -1,9 +1,10 @@
 // app/recommendedlist.tsx
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 // 导入 useLocalSearchParams 和 useRouter
-import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 // 导入 useList
+import { Collapsible } from '@/components/Collapsible';
 import { useList } from './context/ListContext';
 
 // 辅助函数，用于计算旅行天数
@@ -17,39 +18,16 @@ function getDuration(startDate?: string, endDate?: string): number {
 }
 
 
-const ITEMS_BY_PURPOSE: Record<string, string[]> = {
-  观光: [
-    '舒适的步行鞋',
-    '相机',
-    '移动电源',
-    '防晒霜',
-    '遮阳帽',
-    '地图/旅行指南',
-  ],
-  购物: [
-    '可重复使用的购物袋',
-    '大容量行李箱',
-    '便携式行李秤',
-    '信用卡/现金',
-    '退税单',
-  ],
-  美食: ['消化药', '湿纸巾', '宽松舒适的衣物'],
-  商务: ['正装', '笔记本电脑', '名片', '文件袋'],
-  探亲: ['小礼物', '家庭照片', '当地特产'],
-  休闲: ['泳衣', '沙滩巾', '墨镜', '休闲服装'],
+// 固定分类模板：可按需微调
+const CATEGORY_TEMPLATE: Record<string, string[]> = {
+  证件: ['护照/签证', '身份证', '驾照', '现金/信用卡'],
+  行程票券: ['机票/车票', '酒店预订单'],
+  洗漱用品: ['牙刷牙膏', '洗面奶', '毛巾', '剃须刀', '护肤品'],
+  衣物: ['换洗衣物', '内衣袜子', '外套', '鞋子'],
+  电子设备: ['手机及充电器', '相机', '移动电源', '转换插头', '耳机'],
+  药品: ['常用药品', '创可贴', '感冒药', '止泻药'],
+  其他: ['雨伞', '水壶', '太阳镜']
 };
-
-const BASE_ITEMS: string[] = [
-  '护照/签证',
-  '机票/车票',
-  '酒店预订单',
-  '身份证',
-  '现金/信用卡',
-  '手机及充电器',
-  '个人卫生用品',
-  '换洗衣物',
-  '常用药品',
-];
 
 export default function RecommendedListScreen() {
   const router = useRouter();
@@ -72,8 +50,34 @@ export default function RecommendedListScreen() {
   const parsedChildren = Number(norm(children)) || 0;
   const duration = getDuration(nStartDate, nEndDate);
 
-  const purposeItems = useMemo(() => ITEMS_BY_PURPOSE[nPurpose as string] || [], [nPurpose]);
-  const recommendedItems = useMemo(() => [...BASE_ITEMS, ...purposeItems], [purposeItems]);
+  type Section = { key: string; title: string; items: string[] };
+
+  const deriveSections = useCallback(
+    (snapshot?: Record<string, string[]> | string[]): Section[] => {
+      // 优先使用 categories 快照；否则从模板生成
+      let map: Record<string, string[]>;
+      if (snapshot && !Array.isArray(snapshot)) {
+        map = snapshot as Record<string, string[]>;
+      } else {
+        // 从旧 items[] 回退：将未知项放入“其他”
+        const fallbacks: Record<string, string[]> = JSON.parse(JSON.stringify(CATEGORY_TEMPLATE));
+        const items = (Array.isArray(snapshot) ? snapshot : []) as string[];
+        const templateAll = new Set(Object.values(CATEGORY_TEMPLATE).flat());
+        for (const it of items) {
+          if (!templateAll.has(it)) {
+            if (!fallbacks['其他']) fallbacks['其他'] = [];
+            if (!fallbacks['其他'].includes(it)) fallbacks['其他'].push(it);
+          }
+        }
+        map = fallbacks;
+      }
+      return Object.entries(map).map(([k, arr]) => ({ key: k, title: k, items: arr }));
+    },
+    []
+  );
+
+  const [sections, setSections] = useState<Section[]>(() => deriveSections());
+  const [newItemText, setNewItemText] = useState('');
 
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
 
@@ -89,8 +93,9 @@ export default function RecommendedListScreen() {
       // 2) id があれば既存データから復元
       const existing = getById(nId);
       if (existing && existing.checkedItems) setCheckedItems(existing.checkedItems);
+      if (existing) setSections(deriveSections(existing.categories || existing.items));
     }
-  }, [incomingChecked, nId, getById]);
+  }, [incomingChecked, nId, getById, deriveSections]);
 
   const handleToggleCheck = (item: string) => {
     setCheckedItems(prev => ({
@@ -100,6 +105,11 @@ export default function RecommendedListScreen() {
   };
   
   const handleSave = useCallback(() => {
+    const allItems = sections.flatMap((s) => s.items);
+    const categories = sections.reduce<Record<string, string[]>>((acc, s) => {
+      acc[s.title] = s.items;
+      return acc;
+    }, {});
     // 准备要传递回 home 页面的数据（多清单支持）
     const lid = nId || `${Date.now()}`;
     const originalParams = {
@@ -123,6 +133,8 @@ export default function RecommendedListScreen() {
       purpose: nPurpose,
       originalParams,
       checkedItems,
+  items: allItems,
+  categories,
     };
 
     upsertList(listSummary);
@@ -133,18 +145,19 @@ export default function RecommendedListScreen() {
     // 为了简单起见，我们暂时先模拟一个返回操作，稍后通过全局状态来完善。
     // 在实际项目中，可以使用 Jotai, Zustand 或 Redux 来存储状态。
     // 这里我们先不处理传递逻辑，仅返回。
-  }, [nId, nDestination, nStartDate, nEndDate, parsedAdults, parsedChildren, nPurpose, nListName, duration, checkedItems, upsertList, router]);
+  }, [sections, nId, nDestination, nStartDate, nEndDate, parsedAdults, parsedChildren, nPurpose, nListName, duration, checkedItems, upsertList, router]);
 
-  // 在导航栏右侧添加一个保存按钮
+  // 在导航栏右侧添加一个保存按钮，并根据 listName 动态设置标题
   useLayoutEffect(() => {
     navigation.setOptions({
+      title: nListName || '推荐清单',
       headerRight: () => (
         <Pressable onPress={handleSave}>
           <Text style={styles.headerButton}>保存</Text>
         </Pressable>
       ),
     });
-  }, [navigation, handleSave]);
+  }, [navigation, handleSave, nListName]);
 
   return (
     <ScrollView style={styles.container}>
@@ -164,18 +177,67 @@ export default function RecommendedListScreen() {
         </Text>
       </View>
       <View style={styles.listContainer}>
-  {recommendedItems.map((item: string) => (
-          <Pressable
-            key={item}
-            style={styles.listItem}
-            onPress={() => handleToggleCheck(item)}
-          >
-            <View style={[styles.checkbox, checkedItems[item] && styles.checkedCheckbox]}>
-              {checkedItems[item] && <Text style={styles.checkedText}>✓</Text>}
+        {sections.map((sec, idx) => {
+          const total = sec.items.length;
+          const done = sec.items.reduce((acc, it) => acc + (checkedItems[it] ? 1 : 0), 0);
+          const title = `${sec.title}（${done}/${total}）`;
+          return (
+            <View key={sec.key} style={styles.section}>
+              <Collapsible title={title} defaultOpen={idx === 0}>
+                {sec.items.map((item) => (
+                  <View key={item} style={styles.listItemRow}>
+                    <Pressable style={styles.listItem} onPress={() => handleToggleCheck(item)}>
+                      <View style={[styles.checkbox, checkedItems[item] && styles.checkedCheckbox]}>
+                        {checkedItems[item] && <Text style={styles.checkedText}>✓</Text>}
+                      </View>
+                      <Text style={styles.itemText}>{item}</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.deleteBtn}
+                      onPress={() => {
+                        setSections((prev) =>
+                          prev.map((s) =>
+                            s.key === sec.key ? { ...s, items: s.items.filter((it) => it !== item) } : s
+                          )
+                        );
+                        setCheckedItems(({ [item]: _omit, ...rest }) => rest as any);
+                      }}
+                    >
+                      <Text style={styles.deleteBtnText}>删除</Text>
+                    </Pressable>
+                  </View>
+                ))}
+                <View style={styles.addRow}>
+                  <TextInput
+                    style={styles.addInput}
+                    placeholder={`在“${sec.title}”添加自定义项目`}
+                    value={newItemText}
+                    onChangeText={setNewItemText}
+                  />
+                  <Pressable
+                    style={styles.addButton}
+                    onPress={() => {
+                      const name = newItemText.trim();
+                      if (!name) return;
+                      const exists = sections.some((s) => s.items.includes(name));
+                      if (exists) {
+                        setNewItemText('');
+                        return;
+                      }
+                      setSections((prev) =>
+                        prev.map((s) => (s.key === sec.key ? { ...s, items: [...s.items, name] } : s))
+                      );
+                      setCheckedItems((prev) => ({ ...prev, [name]: false }));
+                      setNewItemText('');
+                    }}
+                  >
+                    <Text style={styles.addButtonText}>添加</Text>
+                  </Pressable>
+                </View>
+              </Collapsible>
             </View>
-            <Text style={styles.itemText}>{item}</Text>
-          </Pressable>
-        ))}
+          );
+        })}
       </View>
     </ScrollView>
   );
@@ -228,12 +290,20 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  section: {
+    marginBottom: 10,
+  },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+  },
+  listItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   checkbox: {
     width: 20,
@@ -256,5 +326,42 @@ const styles = StyleSheet.create({
   },
   itemText: {
     fontSize: 16,
+  },
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 10,
+  },
+  addInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    height: 36,
+  },
+  addButton: {
+    backgroundColor: 'dodgerblue',
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  deleteBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: '#ffe0e0',
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  deleteBtnText: {
+    color: '#c00',
+    fontSize: 12,
   },
 });

@@ -40,7 +40,7 @@ export default function NewListScreen() {
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
     const [purpose, setPurpose] = useState('');
-    const [listName, setListName] = useState('日本旅行计划');
+    const [listName, setListName] = useState('');
 
   // 这个函数只在原生应用上被调用（当前 Web 输入使用，因此暂不使用）
   // const onDateChange = (_event: any, selectedDate?: Date) => {
