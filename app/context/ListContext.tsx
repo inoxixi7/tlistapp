@@ -1,54 +1,126 @@
 // app/context/ListContext.tsx
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const ListContext = createContext<any>(null);
+export type TravelList = {
+  id: string;
+  listName: string;
+  destination?: string;
+  duration: number;
+  adults: number;
+  children: number;
+  purpose?: string;
+  originalParams: any;
+  checkedItems: Record<string, boolean>;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type Ctx = {
+  lists: TravelList[];
+  upsertList: (list: Omit<TravelList, 'createdAt' | 'updatedAt'> & { createdAt?: number; updatedAt?: number }) => void;
+  removeList: (id: string) => void;
+  clearAll: () => void;
+  getById: (id: string) => TravelList | undefined;
+};
+
+const STORAGE_KEY_NEW = 'savedLists';
+const STORAGE_KEY_OLD = 'savedList';
+
+const ListContext = createContext<Ctx | null>(null);
 
 export const ListProvider = ({ children }: { children: React.ReactNode }) => {
-  const [savedList, setSavedList] = useState<any | null>(null);
+  const [lists, setLists] = useState<TravelList[]>([]);
 
-  // 初期読み込み（アプリ再起動や Web リロード時の復元）
+  // 初期読み込み + 旧フォーマットからの移行
   useEffect(() => {
     (async () => {
       try {
-        const json = await AsyncStorage.getItem('savedList');
-        if (json) {
-          setSavedList(JSON.parse(json));
+        const jsonNew = await AsyncStorage.getItem(STORAGE_KEY_NEW);
+        if (jsonNew) {
+          setLists(JSON.parse(jsonNew));
+          return;
+        }
+        const jsonOld = await AsyncStorage.getItem(STORAGE_KEY_OLD);
+        if (jsonOld) {
+          // 旧: 単一オブジェクト -> 新: 配列に包む
+          const legacy = JSON.parse(jsonOld);
+          const migrated: TravelList = {
+            id: `legacy-${Date.now()}`,
+            listName: legacy.listName || '旅行清单',
+            destination: legacy.destination,
+            duration: legacy.duration || 0,
+            adults: legacy.adults || 0,
+            children: legacy.children || 0,
+            purpose: legacy.purpose,
+            originalParams: legacy.originalParams,
+            checkedItems: legacy.checkedItems || {},
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          setLists([migrated]);
+          await AsyncStorage.setItem(STORAGE_KEY_NEW, JSON.stringify([migrated]));
+          await AsyncStorage.removeItem(STORAGE_KEY_OLD);
         }
       } catch (e) {
-        // 失敗しても致命的ではないので握りつぶす
-        console.warn('Failed to load saved list', e);
+        console.warn('Failed to load saved lists', e);
       }
     })();
   }, []);
 
-  const persist = async (list: any | null) => {
+  const persist = async (next: TravelList[]) => {
     try {
-      if (list) {
-        await AsyncStorage.setItem('savedList', JSON.stringify(list));
-      } else {
-        await AsyncStorage.removeItem('savedList');
-      }
+      await AsyncStorage.setItem(STORAGE_KEY_NEW, JSON.stringify(next));
     } catch (e) {
-      console.warn('Failed to persist saved list', e);
+      console.warn('Failed to persist saved lists', e);
     }
   };
 
-  const saveList = (list: any) => {
-    setSavedList(list);
-    persist(list);
-  };
+  const upsertList: Ctx['upsertList'] = useCallback((list) => {
+    setLists((prev) => {
+      const idx = prev.findIndex((l) => l.id === list.id);
+      const now = Date.now();
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...prev[idx], ...list, updatedAt: now } as TravelList;
+        persist(next);
+        return next;
+      } else {
+        const newItem: TravelList = {
+          ...list,
+          id: list.id || `${now}`,
+          createdAt: now,
+          updatedAt: now,
+        } as TravelList;
+        const next = [newItem, ...prev];
+        persist(next);
+        return next;
+      }
+    });
+  }, []);
 
-  const clearList = () => {
-    setSavedList(null);
-    persist(null);
-  };
+  const removeList: Ctx['removeList'] = useCallback((id) => {
+    setLists((prev) => {
+      const next = prev.filter((l) => l.id !== id);
+      persist(next);
+      return next;
+    });
+  }, []);
 
-  return (
-    <ListContext.Provider value={{ savedList, saveList, clearList }}>
-      {children}
-    </ListContext.Provider>
-  );
+  const clearAll = useCallback(() => {
+    setLists([]);
+    persist([]);
+  }, []);
+
+  const getById: Ctx['getById'] = useCallback((id) => lists.find((l) => l.id === id), [lists]);
+
+  const value = useMemo<Ctx>(() => ({ lists, upsertList, removeList, clearAll, getById }), [lists, upsertList, removeList, clearAll, getById]);
+
+  return <ListContext.Provider value={value}>{children}</ListContext.Provider>;
 };
 
-export const useList = () => useContext(ListContext);
+export const useList = () => {
+  const ctx = useContext(ListContext);
+  if (!ctx) throw new Error('useList must be used within ListProvider');
+  return ctx;
+};

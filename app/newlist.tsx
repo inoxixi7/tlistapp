@@ -37,23 +37,22 @@ export default function NewListScreen() {
   const [destination, setDestination] = useState('');
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [activeDateType, setActiveDateType] = useState('start');
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
-  const [purpose, setPurpose] = useState('');
+    const [purpose, setPurpose] = useState('');
+    const [listName, setListName] = useState('日本旅行计划');
 
-  // 这个函数只在原生应用上被调用
-  const onDateChange = (_event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      if (activeDateType === 'start') {
-        setStartDate(selectedDate);
-      } else {
-        setEndDate(selectedDate);
-      }
-    }
-  };
+  // 这个函数只在原生应用上被调用（当前 Web 输入使用，因此暂不使用）
+  // const onDateChange = (_event: any, selectedDate?: Date) => {
+  //   setShowDatePicker(false);
+  //   if (selectedDate) {
+  //     if (activeDateType === 'start') {
+  //       setStartDate(selectedDate);
+  //     } else {
+  //       setEndDate(selectedDate);
+  //     }
+  //   }
+  // };
 
   // 新增的保存处理函数
   const handleSave = () => {
@@ -66,7 +65,8 @@ export default function NewListScreen() {
         endDate: endDate.toISOString(),     // 将日期转换为字符串以便传递
         adults,
         children,
-        purpose,
+          purpose,
+          listName,
       },
     });
   };
@@ -78,10 +78,12 @@ export default function NewListScreen() {
       {/* 清单名称 */}
       <View style={styles.inputContainer}>
         <Text style={styles.label}>清单名称</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="例如：日本旅行计划"
-        />
+          <TextInput
+            style={styles.input}
+            placeholder="例如：日本旅行计划"
+            value={listName}
+            onChangeText={setListName}
+          />
       </View>
 
       {/* 目的地选择 */}

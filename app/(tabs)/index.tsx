@@ -1,36 +1,107 @@
 // app/(tabs)/index.tsx
 import { Link, useRouter } from 'expo-router';
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useList } from '../context/ListContext';
 
 export default function HomeScreen() {
-  const { savedList } = useList();
+  const { lists, removeList, upsertList } = useList();
   const router = useRouter();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState<string>('');
 
-  const handleEdit = () => {
-    // 如果有保存的清单，直接导航到 recommendedlist 页面并传递所有原始参数
-    if (savedList) {
-      router.push({
-        pathname: '/recommendedlist',
-        params: { ...savedList.originalParams, checkedItems: JSON.stringify(savedList.checkedItems || {}) },
-      });
-    }
+  const handleEdit = (id: string) => {
+    const item = lists.find((l) => l.id === id);
+    if (!item) return;
+    router.push({
+      pathname: '/recommendedlist',
+      params: {
+        ...item.originalParams,
+        id: item.id,
+        checkedItems: JSON.stringify(item.checkedItems || {}),
+      },
+    });
+  };
+
+  const handleAskDelete = (id: string) => {
+    const item = lists.find((l) => l.id === id);
+    if (!item) return;
+    Alert.alert('删除清单', `确定删除“${item.listName}”吗？`, [
+      { text: '取消', style: 'cancel' },
+      { text: '删除', style: 'destructive', onPress: () => removeList(id) },
+    ]);
+  };
+
+  const startRename = (id: string) => {
+    const item = lists.find((l) => l.id === id);
+    if (!item) return;
+    setEditingId(id);
+    setNameDraft(item.listName || '旅行清单');
+  };
+
+  const cancelRename = () => {
+    setEditingId(null);
+    setNameDraft('');
+  };
+
+  const saveRename = (id: string) => {
+    const item = lists.find((l) => l.id === id);
+    if (!item) return;
+    const newName = nameDraft.trim() || '旅行清单';
+    upsertList({
+      ...item,
+      listName: newName,
+      originalParams: { ...item.originalParams, listName: newName },
+    });
+    cancelRename();
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>我的旅行清单</Text>
-
-      {savedList ? (
-        <Pressable style={styles.listCard} onPress={handleEdit}>
-          <Text style={styles.cardTitle}>{savedList.listName}</Text>
-          <Text style={styles.cardInfo}>目的地: {savedList.destination}</Text>
-          <Text style={styles.cardInfo}>人数: {savedList.adults}大, {savedList.children}小</Text>
-          <Text style={styles.cardInfo}>天数: {savedList.duration}天</Text>
-        </Pressable>
-      ) : (
+      {lists.length === 0 ? (
         <Text style={styles.placeholder}>还没有保存的清单，快去创建一个吧！</Text>
+      ) : (
+        <ScrollView style={{ width: '100%' }} contentContainerStyle={{ alignItems: 'center' }}>
+          {lists.map((l) => (
+            <View key={l.id} style={styles.listCard}>
+              {editingId === l.id ? (
+                <View style={styles.renameRow}>
+                  <TextInput
+                    style={styles.renameInput}
+                    value={nameDraft}
+                    onChangeText={setNameDraft}
+                    placeholder="输入新的清单名称"
+                  />
+                  <Pressable style={[styles.smallButton, styles.saveBtn]} onPress={() => saveRename(l.id)}>
+                    <Text style={styles.smallButtonText}>保存</Text>
+                  </Pressable>
+                  <Pressable style={[styles.smallButton, styles.cancelBtn]} onPress={cancelRename}>
+                    <Text style={styles.smallButtonText}>取消</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle}>{l.listName || '旅行清单'}</Text>
+                  <View style={styles.actionRow}>
+                    <Pressable style={[styles.actionBtn, styles.renameBtn]} onPress={() => startRename(l.id)}>
+                      <Text style={styles.actionText}>重命名</Text>
+                    </Pressable>
+                    <Pressable style={[styles.actionBtn, styles.deleteBtn]} onPress={() => handleAskDelete(l.id)}>
+                      <Text style={styles.actionText}>删除</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+
+              <Pressable onPress={() => handleEdit(l.id)}>
+                <Text style={styles.cardInfo}>目的地: {l.destination || '未填写'}</Text>
+                <Text style={styles.cardInfo}>人数: {l.adults}大, {l.children}小</Text>
+                <Text style={styles.cardInfo}>天数: {l.duration}天</Text>
+              </Pressable>
+            </View>
+          ))}
+        </ScrollView>
       )}
 
       <Link href="/newlist" asChild>
@@ -55,6 +126,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 20,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
   listCard: {
     backgroundColor: '#fff',
     padding: 20,
@@ -72,6 +149,25 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 5,
   },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  renameBtn: {
+    backgroundColor: '#e0f2ff',
+  },
+  deleteBtn: {
+    backgroundColor: '#ffe0e0',
+  },
+  actionText: {
+    color: '#333',
+    fontSize: 14,
+  },
   cardInfo: {
     fontSize: 16,
     color: '#555',
@@ -80,6 +176,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#888',
     textAlign: 'center',
+  },
+  renameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  renameInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    height: 36,
+  },
+  smallButton: {
+    height: 36,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  saveBtn: {
+    backgroundColor: 'dodgerblue',
+  },
+  cancelBtn: {
+    backgroundColor: '#aaa',
+  },
+  smallButtonText: {
+    color: '#fff',
+    fontSize: 14,
   },
   createButton: {
     backgroundColor: 'dodgerblue',

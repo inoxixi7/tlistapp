@@ -1,10 +1,8 @@
 // app/recommendedlist.tsx
-import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 // 导入 useLocalSearchParams 和 useRouter
-import { useLocalSearchParams, useRouter } from 'expo-router';
-// 导入 useNavigation
-import { useNavigation } from 'expo-router';
+import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 // 导入 useList
 import { useList } from './context/ListContext';
 
@@ -57,16 +55,18 @@ export default function RecommendedListScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const params = useLocalSearchParams();
-  const { savedList, saveList } = useList(); // 使用 useList 钩子
+  const { upsertList, getById } = useList(); // 使用 useList 钩子
 
-  const { destination, startDate, endDate, adults, children, purpose, checkedItems: incomingChecked } = params as Record<string, string | string[]>;
+  const { id, destination, startDate, endDate, adults, children, purpose, listName, checkedItems: incomingChecked } = params as Record<string, string | string[]>;
 
   // Normalize possible string[] from URL params to string
   const norm = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v) as string | undefined;
+  const nId = norm(id);
   const nDestination = norm(destination);
   const nStartDate = norm(startDate);
   const nEndDate = norm(endDate);
   const nPurpose = norm(purpose);
+  const nListName = norm(listName) || '日本旅行计划';
 
   const parsedAdults = Number(norm(adults)) || 0;
   const parsedChildren = Number(norm(children)) || 0;
@@ -85,16 +85,12 @@ export default function RecommendedListScreen() {
         const parsed = JSON.parse(Array.isArray(incomingChecked) ? incomingChecked[0] : incomingChecked);
         if (parsed && typeof parsed === 'object') setCheckedItems(parsed);
       } catch {}
-    } else if (savedList && savedList.originalParams) {
-      // 只在目的地/目的等相同的情况下恢复，避免跨不同列表污染
-      const sameContext =
-        savedList.originalParams.destination === nDestination &&
-        savedList.originalParams.purpose === nPurpose;
-      if (sameContext && savedList.checkedItems) {
-        setCheckedItems(savedList.checkedItems);
-      }
+    } else if (nId) {
+      // 2) id があれば既存データから復元
+      const existing = getById(nId);
+      if (existing && existing.checkedItems) setCheckedItems(existing.checkedItems);
     }
-  }, [incomingChecked, nDestination, nPurpose, savedList]);
+  }, [incomingChecked, nId, getById]);
 
   const handleToggleCheck = (item: string) => {
     setCheckedItems(prev => ({
@@ -103,6 +99,42 @@ export default function RecommendedListScreen() {
     }));
   };
   
+  const handleSave = useCallback(() => {
+    // 准备要传递回 home 页面的数据（多清单支持）
+    const lid = nId || `${Date.now()}`;
+    const originalParams = {
+      id: lid,
+      destination: nDestination,
+      startDate: nStartDate,
+      endDate: nEndDate,
+      adults: String(parsedAdults),
+      children: String(parsedChildren),
+      purpose: nPurpose,
+      listName: nListName,
+    };
+
+    const listSummary = {
+      id: lid,
+      listName: nListName,
+      destination: nDestination,
+      duration: duration,
+      adults: parsedAdults,
+      children: parsedChildren,
+      purpose: nPurpose,
+      originalParams,
+      checkedItems,
+    };
+
+    upsertList(listSummary);
+    router.replace('/');
+    // 实际的参数传递，需要通过 context 或全局状态管理
+    // router.setParams({ savedList: listSummary });
+    // 由于 Expo Router 的 router.back() 不支持直接传参，我们可以在 home 页面监听导航事件或使用全局状态。
+    // 为了简单起见，我们暂时先模拟一个返回操作，稍后通过全局状态来完善。
+    // 在实际项目中，可以使用 Jotai, Zustand 或 Redux 来存储状态。
+    // 这里我们先不处理传递逻辑，仅返回。
+  }, [nId, nDestination, nStartDate, nEndDate, parsedAdults, parsedChildren, nPurpose, nListName, duration, checkedItems, upsertList, router]);
+
   // 在导航栏右侧添加一个保存按钮
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -112,36 +144,7 @@ export default function RecommendedListScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, params, saveList, checkedItems]); // 保存按钮可见时依赖当前状态
-
-  const handleSave = () => {
-    // 准备要传递回 home 页面的数据
-    const listSummary = {
-      destination: destination,
-      duration: duration,
-      adults: parsedAdults,
-      children: parsedChildren,
-      purpose: purpose,
-      // 将所有原始参数保存，以便编辑时使用
-      originalParams: params,
-      // 勾选状态
-      checkedItems,
-      // 可以在这里添加更多你想保存的数据，比如清单名称
-      listName: '日本旅行计划' // 示例，你可能需要从 newlist 页面传递过来
-    };
-
-    // 这里是关键：返回上一页并传递参数
-    // 我们将数据作为参数传递给 home 页面
-    saveList(listSummary); // 将数据保存到 Context
-    // 使用 router.replace() 替换当前页面，直接返回到 home 页面
-  router.replace('/'); 
-    // 实际的参数传递，需要通过 context 或全局状态管理
-    // router.setParams({ savedList: listSummary });
-    // 由于 Expo Router 的 router.back() 不支持直接传参，我们可以在 home 页面监听导航事件或使用全局状态。
-    // 为了简单起见，我们暂时先模拟一个返回操作，稍后通过全局状态来完善。
-    // 在实际项目中，可以使用 Jotai, Zustand 或 Redux 来存储状态。
-    // 这里我们先不处理传递逻辑，仅返回。
-  };
+  }, [navigation, handleSave]);
 
   return (
     <ScrollView style={styles.container}>
