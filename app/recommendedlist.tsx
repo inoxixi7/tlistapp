@@ -81,19 +81,39 @@ export default function RecommendedListScreen() {
 
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
 
-  // 如果是从已保存的清单进入编辑，恢复勾选状态
+  // 从已保存的清单进入编辑时：优先按 id 载入已保存的分组，再合并勾选状态
   useEffect(() => {
-    // 1) ルートパラメータからの復元（優先）
+    if (nId) {
+      const existing = getById(nId);
+      if (existing) {
+        setSections(deriveSections(existing.categories || existing.items));
+        let merged: Record<string, boolean> = existing.checkedItems || {};
+        if (incomingChecked) {
+          try {
+            const parsed = JSON.parse(Array.isArray(incomingChecked) ? incomingChecked[0] : incomingChecked);
+            if (parsed && typeof parsed === 'object') {
+              merged = { ...merged, ...parsed };
+            }
+          } catch {}
+        }
+        setCheckedItems(merged);
+        return;
+      }
+      // 若找不到 existing，则回退到仅解析传入的勾选状态
+      if (incomingChecked) {
+        try {
+          const parsed = JSON.parse(Array.isArray(incomingChecked) ? incomingChecked[0] : incomingChecked);
+          if (parsed && typeof parsed === 'object') setCheckedItems(parsed);
+        } catch {}
+      }
+      return;
+    }
+    // 新建场景但携带了勾选状态（不常见）：也予以恢复
     if (incomingChecked) {
       try {
         const parsed = JSON.parse(Array.isArray(incomingChecked) ? incomingChecked[0] : incomingChecked);
         if (parsed && typeof parsed === 'object') setCheckedItems(parsed);
       } catch {}
-    } else if (nId) {
-      // 2) id があれば既存データから復元
-      const existing = getById(nId);
-      if (existing && existing.checkedItems) setCheckedItems(existing.checkedItems);
-      if (existing) setSections(deriveSections(existing.categories || existing.items));
     }
   }, [incomingChecked, nId, getById, deriveSections]);
 
