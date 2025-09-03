@@ -1,6 +1,7 @@
 // app/recommendedlist.tsx
 import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Alert, Platform } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 // 导入 useLocalSearchParams 和 useRouter
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 // 导入 useList
@@ -33,12 +34,7 @@ function getDuration(startDate?: string, endDate?: string): number {
   return Number.isFinite(diffDays) ? diffDays : 0;
 }
 
-function formatDateYmd(s?: string): string {
-  const d = parseDateSafe(s);
-  if (!d) return '未入力';
-  const pad2 = (n: number) => n.toString().padStart(2, '0');
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
+// 已改为直接显示编辑中的输入值，保留解析函数供校验使用
 
 
 // 固定分类模板：可按需微调
@@ -71,7 +67,35 @@ export default function RecommendedListScreen() {
 
   const parsedAdults = Number(norm(adults)) || 0;
   const parsedChildren = Number(norm(children)) || 0;
-  const duration = getDuration(nStartDate, nEndDate);
+
+  // 编辑用常量与状态
+  const TRAVEL_PURPOSES = ['観光', 'ショッピング', 'グルメ', 'ビジネス', '帰省', 'レジャー'];
+  const pad2 = (n: number) => n.toString().padStart(2, '0');
+  // 初始化为当前值（日期使用 YYYY-MM-DD 文本）
+  const [editAdults, setEditAdults] = useState<number>(parsedAdults);
+  const [editChildren, setEditChildren] = useState<number>(parsedChildren);
+  const [editStartDateInput, setEditStartDateInput] = useState<string>(() => {
+    const d = parseDateSafe(nStartDate);
+    return d ? `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}` : '';
+  });
+  const [editEndDateInput, setEditEndDateInput] = useState<string>(() => {
+    const d = parseDateSafe(nEndDate);
+    return d ? `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}` : '';
+  });
+  const [editPurpose, setEditPurpose] = useState<string>(nPurpose || '');
+  const [showEdit, setShowEdit] = useState(false);
+
+  const getValidationErrors = React.useCallback((): string[] => {
+    const errs: string[] = [];
+    const s = parseDateSafe(editStartDateInput);
+    const e = parseDateSafe(editEndDateInput);
+    if (!s) errs.push('出発日を正しく入力してください（YYYY-MM-DD）。');
+    if (!e) errs.push('終了日を正しく入力してください（YYYY-MM-DD）。');
+    if (s && e && e.getTime() < s.getTime()) errs.push('終了日は出発日以降の日付にしてください。');
+    if (!editPurpose) errs.push('旅行目的を選択してください。');
+    if (editAdults < 0 || editChildren < 0) errs.push('人数は0以上にしてください。');
+    return errs;
+  }, [editStartDateInput, editEndDateInput, editPurpose, editAdults, editChildren]);
 
   type Section = { key: string; title: string; items: string[] };
 
@@ -148,6 +172,17 @@ export default function RecommendedListScreen() {
   };
   
   const handleSave = useCallback(() => {
+    // 校验编辑项
+    const errs = getValidationErrors();
+    if (errs.length > 0) {
+      const message = errs.join('\n');
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && (window as any).alert) (window as any).alert(message);
+      } else {
+        Alert.alert('入力エラー', message);
+      }
+      return;
+    }
     const allItems = sections.flatMap((s) => s.items);
     const categories = sections.reduce<Record<string, string[]>>((acc, s) => {
       acc[s.title] = s.items;
@@ -155,14 +190,18 @@ export default function RecommendedListScreen() {
     }, {});
     // 准备要传递回 home 页面的数据（多清单支持）
     const lid = nId || `${Date.now()}`;
+    const sDate = parseDateSafe(editStartDateInput)!;
+    const eDate = parseDateSafe(editEndDateInput)!;
+    const startIso = sDate.toISOString();
+    const endIso = eDate.toISOString();
     const originalParams = {
       id: lid,
       destination: nDestination,
-      startDate: nStartDate,
-      endDate: nEndDate,
-      adults: String(parsedAdults),
-      children: String(parsedChildren),
-      purpose: nPurpose,
+      startDate: startIso,
+      endDate: endIso,
+      adults: String(editAdults),
+      children: String(editChildren),
+      purpose: editPurpose,
       listName: nListName,
     };
 
@@ -170,10 +209,10 @@ export default function RecommendedListScreen() {
       id: lid,
       listName: nListName,
       destination: nDestination,
-      duration: duration,
-      adults: parsedAdults,
-      children: parsedChildren,
-      purpose: nPurpose,
+      duration: getDuration(startIso, endIso),
+      adults: editAdults,
+      children: editChildren,
+      purpose: editPurpose,
       originalParams,
       checkedItems,
   items: allItems,
@@ -188,7 +227,7 @@ export default function RecommendedListScreen() {
     // 为了简单起见，我们暂时先模拟一个返回操作，稍后通过全局状态来完善。
     // 在实际项目中，可以使用 Jotai, Zustand 或 Redux 来存储状态。
     // 这里我们先不处理传递逻辑，仅返回。
-  }, [sections, nId, nDestination, nStartDate, nEndDate, parsedAdults, parsedChildren, nPurpose, nListName, duration, checkedItems, upsertList, router]);
+  }, [sections, nId, nDestination, nListName, checkedItems, upsertList, router, editAdults, editChildren, editEndDateInput, editPurpose, editStartDateInput, getValidationErrors]);
 
   // 在导航栏右侧添加一个保存按钮，并根据 listName 动态设置标题
   useLayoutEffect(() => {
@@ -206,18 +245,83 @@ export default function RecommendedListScreen() {
     <ScrollView style={styles.container}>
     <Text style={styles.header}>あなたへのおすすめ旅行リスト</Text>
       <View style={styles.summaryContainer}>
+        <View style={styles.summaryHeaderRow}>
+          <View style={{ flex: 1 }} />
+          <Pressable onPress={() => setShowEdit((v) => !v)}>
+            <Text style={styles.editLink}>{showEdit ? '閉じる' : '編集'}</Text>
+          </Pressable>
+        </View>
         <Text style={styles.summaryText}>
       <Text style={styles.label}>人数:</Text>
-      大人{parsedAdults}名・子ども{parsedChildren}名
+      大人{editAdults}名・子ども{editChildren}名
         </Text>
         <Text style={styles.summaryText}>
       <Text style={styles.label}>期間:</Text>
-      {formatDateYmd(nStartDate)} 〜 {formatDateYmd(nEndDate)}
+      {editStartDateInput || '未入力'} 〜 {editEndDateInput || '未入力'}
         </Text>
         <Text style={styles.summaryText}>
       <Text style={styles.label}>旅行目的:</Text>
-      {nPurpose || '未選択'}
+      {editPurpose || '未選択'}
         </Text>
+
+        {showEdit && (
+          <View style={styles.editPanel}>
+            <View style={styles.editRow}>
+              <Text style={styles.editLabel}>大人</Text>
+              <View style={styles.counterGroup}>
+                <Pressable style={styles.counterBtn} onPress={() => setEditAdults((v) => Math.max(0, v - 1))}>
+                  <Text style={styles.counterBtnText}>-</Text>
+                </Pressable>
+                <Text style={styles.counterValue}>{editAdults}</Text>
+                <Pressable style={styles.counterBtn} onPress={() => setEditAdults((v) => v + 1)}>
+                  <Text style={styles.counterBtnText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+            <View style={styles.editRow}>
+              <Text style={styles.editLabel}>子ども</Text>
+              <View style={styles.counterGroup}>
+                <Pressable style={styles.counterBtn} onPress={() => setEditChildren((v) => Math.max(0, v - 1))}>
+                  <Text style={styles.counterBtnText}>-</Text>
+                </Pressable>
+                <Text style={styles.counterValue}>{editChildren}</Text>
+                <Pressable style={styles.counterBtn} onPress={() => setEditChildren((v) => v + 1)}>
+                  <Text style={styles.counterBtnText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+            <View style={styles.editRow}>
+              <Text style={styles.editLabel}>出発日</Text>
+              <TextInput
+                style={styles.editInput}
+                placeholder="YYYY-MM-DD"
+                value={editStartDateInput}
+                onChangeText={setEditStartDateInput}
+              />
+            </View>
+            <View style={styles.editRow}>
+              <Text style={styles.editLabel}>終了日</Text>
+              <TextInput
+                style={styles.editInput}
+                placeholder="YYYY-MM-DD"
+                value={editEndDateInput}
+                onChangeText={setEditEndDateInput}
+              />
+            </View>
+            <View style={styles.editRow}>
+              <Text style={styles.editLabel}>旅行目的</Text>
+              <View style={styles.pickerWrap}>
+                <Picker selectedValue={editPurpose} onValueChange={(v) => setEditPurpose(String(v))}>
+                  <Picker.Item label="選択" value="" />
+                  {TRAVEL_PURPOSES.map((p) => (
+                    <Picker.Item key={p} label={p} value={p} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+            <Text style={styles.editHint}>右上の「保存」を押すと変更が適用されます。</Text>
+          </View>
+        )}
       </View>
       <View style={styles.listContainer}>
         {sections.map((sec, idx) => {
@@ -246,7 +350,7 @@ export default function RecommendedListScreen() {
                         setCheckedItems(({ [item]: _omit, ...rest }) => rest as any);
                       }}
                     >
-                      <Text style={styles.deleteBtnText}>删除</Text>
+                      <Text style={styles.deleteBtnText}>削除</Text>
                     </Pressable>
                   </View>
                 ))}
@@ -395,6 +499,78 @@ const styles = StyleSheet.create({
   addButtonText: {
     color: '#fff',
     fontSize: 14,
+  },
+  // ===== Edit panel styles =====
+  summaryHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginBottom: 8,
+  },
+  editLink: {
+    color: 'dodgerblue',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  editPanel: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    gap: 10,
+  },
+  editRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  editLabel: {
+    width: 80,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  counterGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  counterBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#eee',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  counterBtnText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  counterValue: {
+    minWidth: 28,
+    textAlign: 'center',
+    fontSize: 16,
+  },
+  editInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    height: 36,
+  },
+  pickerWrap: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  editHint: {
+    color: '#888',
+    fontSize: 12,
+    marginTop: 6,
   },
   deleteBtn: {
     paddingHorizontal: 8,
