@@ -1,7 +1,7 @@
 // app/recommendedlist.tsx
-import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Alert, Platform } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 // 导入 useLocalSearchParams 和 useRouter
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 // 导入 useList
