@@ -64,6 +64,28 @@ export default function HomeScreen() {
     cancelRename();
   };
 
+  // 安全解析与 YYYY-MM-DD 格式化
+  const parseDateSafe = (s?: string): Date | null => {
+    if (!s) return null;
+    const m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+    if (m) {
+      const y = parseInt(m[1], 10);
+      const mo = parseInt(m[2], 10) - 1;
+      const da = parseInt(m[3], 10);
+      const d = new Date(y, mo, da);
+      if (d.getFullYear() === y && d.getMonth() === mo && d.getDate() === da) return d;
+      return null;
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const formatDateYmd = (s?: string) => {
+    const d = parseDateSafe(s);
+    if (!d) return '未入力';
+    const pad2 = (n: number) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>マイ旅行リスト</Text>
@@ -105,7 +127,7 @@ export default function HomeScreen() {
               <Pressable onPress={() => handleEdit(l.id)}>
                 <Text style={styles.cardInfo}>目的地: {l.destination || '未入力'}</Text>
                 <Text style={styles.cardInfo}>人数: 大人{l.adults}名・子ども{l.children}名</Text>
-                <Text style={styles.cardInfo}>日数: {l.duration}日</Text>
+                <Text style={styles.cardInfo}>期間: {formatDateYmd(l.originalParams?.startDate)} 〜 {formatDateYmd(l.originalParams?.endDate)}</Text>
                 {/* 进度条 */}
                 <View style={styles.progressRow}>
                   {(() => {

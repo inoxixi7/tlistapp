@@ -33,6 +33,13 @@ function getDuration(startDate?: string, endDate?: string): number {
   return Number.isFinite(diffDays) ? diffDays : 0;
 }
 
+function formatDateYmd(s?: string): string {
+  const d = parseDateSafe(s);
+  if (!d) return '未入力';
+  const pad2 = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
 
 // 固定分类模板：可按需微调
 const CATEGORY_TEMPLATE: Record<string, string[]> = {
@@ -204,8 +211,8 @@ export default function RecommendedListScreen() {
       大人{parsedAdults}名・子ども{parsedChildren}名
         </Text>
         <Text style={styles.summaryText}>
-      <Text style={styles.label}>日数:</Text>
-      {duration}日
+      <Text style={styles.label}>期間:</Text>
+      {formatDateYmd(nStartDate)} 〜 {formatDateYmd(nEndDate)}
         </Text>
         <Text style={styles.summaryText}>
       <Text style={styles.label}>旅行目的:</Text>
