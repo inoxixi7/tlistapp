@@ -1,7 +1,9 @@
 // app/newlist.tsx
 import React, { useState } from 'react';
 import {
+  Alert,
   Button,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -35,8 +37,6 @@ export default function NewListScreen() {
   const router = useRouter(); // 使用 useRouter 钩子
 
   const [destination, setDestination] = useState('');
-  const [startDate, setStartDate] = useState(new Date());
-  const [endDate, setEndDate] = useState(new Date());
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
     const [purpose, setPurpose] = useState('');
@@ -79,19 +79,46 @@ export default function NewListScreen() {
   // };
 
   // 新增的保存处理函数
+  // 校验函数：返回错误消息列表（日语）
+  const getValidationErrors = (): string[] => {
+    const errs: string[] = [];
+    if (!listName.trim()) errs.push('リスト名を入力してください。');
+    if (!destination) errs.push('目的地を選択してください。');
+    if (!purpose) errs.push('旅行目的を選択してください。');
+    const s = tryParseDate(startDateInput);
+    const e = tryParseDate(endDateInput);
+    if (!s) errs.push('出発日を正しく入力してください（YYYY-MM-DD）。');
+    if (!e) errs.push('終了日を正しく入力してください（YYYY-MM-DD）。');
+    if (s && e && e.getTime() < s.getTime()) errs.push('終了日は出発日以降の日付にしてください。');
+    return errs;
+  };
+
+  const isValidForm = getValidationErrors().length === 0;
+
   const handleSave = () => {
-    // 使用 router.push() 导航并传递参数
+    const errs = getValidationErrors();
+    if (errs.length > 0) {
+      const message = errs.join('\n');
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && (window as any).alert) (window as any).alert(message);
+      } else {
+        Alert.alert('入力エラー', message);
+      }
+      return;
+    }
+    // 使用 router.push() 导航并传递参数（此时已校验通过）
+    const s = tryParseDate(startDateInput)!;
+    const e = tryParseDate(endDateInput)!;
     router.push({
       pathname: '/recommendedlist', // 目标页面的路径名
       params: {
         destination,
-        // 使用 ISO 字符串；若无效则使用输入框 YYYY-MM-DD
-        startDate: isNaN(startDate.getTime()) ? startDateInput : startDate.toISOString(),
-        endDate: isNaN(endDate.getTime()) ? endDateInput : endDate.toISOString(),
+        startDate: s.toISOString(),
+        endDate: e.toISOString(),
         adults,
         children,
-          purpose,
-          listName,
+        purpose,
+        listName: listName.trim(),
       },
     });
   };
@@ -136,8 +163,6 @@ export default function NewListScreen() {
             value={startDateInput}
             onChangeText={(text) => {
               setStartDateInput(text);
-              const d = tryParseDate(text);
-              if (d) setStartDate(d);
             }}
           />
         </View>
@@ -149,8 +174,6 @@ export default function NewListScreen() {
             value={endDateInput}
             onChangeText={(text) => {
               setEndDateInput(text);
-              const d = tryParseDate(text);
-              if (d) setEndDate(d);
             }}
           />
         </View>
@@ -205,7 +228,7 @@ export default function NewListScreen() {
       </View>
 
   {/* 调用 handleSave 函数 */}
-  <Button title="リストを保存" onPress={handleSave} />
+  <Button title="リストを保存" onPress={handleSave} disabled={!isValidForm} />
     </View>
   );
 }
