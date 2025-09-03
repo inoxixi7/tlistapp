@@ -125,7 +125,7 @@ export default function NewListScreen() {
 
   return (
     <View style={styles.container}>
-  <Text style={styles.header}>新しいリスト</Text>
+  {/* <Text style={styles.header}>新しいリスト</Text> */}
 
       {/* 清单名称 */}
       <View style={styles.inputContainer}>

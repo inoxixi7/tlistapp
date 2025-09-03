@@ -90,7 +90,7 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>マイ旅行リスト</Text>
       {lists.length === 0 ? (
-        <Text style={styles.placeholder}>保存されたリストはまだありません。まずは作成してみましょう！</Text>
+        <Text style={styles.placeholder}>保存されたリストはまだありません。<br />まずは作成してみましょう！</Text>
       ) : (
         <ScrollView style={{ width: '100%' }} contentContainerStyle={{ alignItems: 'center' }}>
           {lists.map((l) => (

@@ -243,7 +243,7 @@ export default function RecommendedListScreen() {
 
   return (
     <ScrollView style={styles.container}>
-    <Text style={styles.header}>あなたへのおすすめ旅行リスト</Text>
+    {/* <Text style={styles.header}>あなたへのおすすめ旅行リスト</Text> */}
       <View style={styles.summaryContainer}>
         <View style={styles.summaryHeaderRow}>
           <View style={{ flex: 1 }} />
