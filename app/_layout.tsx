@@ -7,8 +7,8 @@ export default function RootLayout() {
     <ListProvider>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="newlist" options={{ title: '添加新清单' }} />
-        <Stack.Screen name="recommendedlist" options={{ title: '推荐清单', headerRight: () => null }} />
+  <Stack.Screen name="newlist" options={{ title: '新しいリストを追加' }} />
+  <Stack.Screen name="recommendedlist" options={{ title: 'おすすめリスト', headerRight: () => null }} />
       </Stack>
     </ListProvider>
   );

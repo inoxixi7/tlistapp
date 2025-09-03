@@ -49,7 +49,7 @@ export const ListProvider = ({ children }: { children: React.ReactNode }) => {
           const legacy = JSON.parse(jsonOld);
           const migrated: TravelList = {
             id: `legacy-${Date.now()}`,
-            listName: legacy.listName || '旅行清单',
+            listName: legacy.listName || '旅行リスト',
             destination: legacy.destination,
             duration: legacy.duration || 0,
             adults: legacy.adults || 0,
@@ -60,7 +60,7 @@ export const ListProvider = ({ children }: { children: React.ReactNode }) => {
             items: Array.isArray(legacy.items) ? legacy.items : [],
             categories: legacy.categories && typeof legacy.categories === 'object'
               ? legacy.categories
-              : (Array.isArray(legacy.items) ? { '清单': legacy.items } : undefined),
+              : (Array.isArray(legacy.items) ? { 'リスト': legacy.items } : undefined),
             createdAt: Date.now(),
             updatedAt: Date.now(),
           };

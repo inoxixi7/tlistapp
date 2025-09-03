@@ -26,9 +26,9 @@ export default function HomeScreen() {
   const handleAskDelete = (id: string) => {
     const item = lists.find((l) => l.id === id);
     if (!item) return;
-    Alert.alert('删除清单', `确定删除“${item.listName}”吗？`, [
-      { text: '取消', style: 'cancel' },
-      { text: '删除', style: 'destructive', onPress: () => removeList(id) },
+    Alert.alert('リストを削除', `「${item.listName}」を削除しますか？`, [
+      { text: 'キャンセル', style: 'cancel' },
+      { text: '削除', style: 'destructive', onPress: () => removeList(id) },
     ]);
   };
 
@@ -36,7 +36,7 @@ export default function HomeScreen() {
     const item = lists.find((l) => l.id === id);
     if (!item) return;
     setEditingId(id);
-    setNameDraft(item.listName || '旅行清单');
+  setNameDraft(item.listName || '旅行リスト');
   };
 
   const cancelRename = () => {
@@ -47,7 +47,7 @@ export default function HomeScreen() {
   const saveRename = (id: string) => {
     const item = lists.find((l) => l.id === id);
     if (!item) return;
-    const newName = nameDraft.trim() || '旅行清单';
+  const newName = nameDraft.trim() || '旅行リスト';
     upsertList({
       ...item,
       listName: newName,
@@ -58,9 +58,9 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>我的旅行清单</Text>
+      <Text style={styles.title}>マイ旅行リスト</Text>
       {lists.length === 0 ? (
-        <Text style={styles.placeholder}>还没有保存的清单，快去创建一个吧！</Text>
+        <Text style={styles.placeholder}>保存されたリストはまだありません。まずは作成してみましょう！</Text>
       ) : (
         <ScrollView style={{ width: '100%' }} contentContainerStyle={{ alignItems: 'center' }}>
           {lists.map((l) => (
@@ -71,33 +71,33 @@ export default function HomeScreen() {
                     style={styles.renameInput}
                     value={nameDraft}
                     onChangeText={setNameDraft}
-                    placeholder="输入新的清单名称"
+                    placeholder="新しいリスト名を入力"
                   />
                   <Pressable style={[styles.smallButton, styles.saveBtn]} onPress={() => saveRename(l.id)}>
                     <Text style={styles.smallButtonText}>保存</Text>
                   </Pressable>
                   <Pressable style={[styles.smallButton, styles.cancelBtn]} onPress={cancelRename}>
-                    <Text style={styles.smallButtonText}>取消</Text>
+                    <Text style={styles.smallButtonText}>キャンセル</Text>
                   </Pressable>
                 </View>
               ) : (
                 <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>{l.listName || '旅行清单'}</Text>
+                  <Text style={styles.cardTitle}>{l.listName || '旅行リスト'}</Text>
                   <View style={styles.actionRow}>
                     <Pressable style={[styles.actionBtn, styles.renameBtn]} onPress={() => startRename(l.id)}>
-                      <Text style={styles.actionText}>重命名</Text>
+                      <Text style={styles.actionText}>名前を変更</Text>
                     </Pressable>
                     <Pressable style={[styles.actionBtn, styles.deleteBtn]} onPress={() => handleAskDelete(l.id)}>
-                      <Text style={styles.actionText}>删除</Text>
+                      <Text style={styles.actionText}>削除</Text>
                     </Pressable>
                   </View>
                 </View>
               )}
 
               <Pressable onPress={() => handleEdit(l.id)}>
-                <Text style={styles.cardInfo}>目的地: {l.destination || '未填写'}</Text>
-                <Text style={styles.cardInfo}>人数: {l.adults}大, {l.children}小</Text>
-                <Text style={styles.cardInfo}>天数: {l.duration}天</Text>
+                <Text style={styles.cardInfo}>目的地: {l.destination || '未入力'}</Text>
+                <Text style={styles.cardInfo}>人数: 大人{l.adults}名・子ども{l.children}名</Text>
+                <Text style={styles.cardInfo}>日数: {l.duration}日</Text>
                 {/* 进度条 */}
                 <View style={styles.progressRow}>
                   {(() => {
@@ -120,9 +120,9 @@ export default function HomeScreen() {
         </ScrollView>
       )}
 
-      <Link href="/newlist" asChild>
+    <Link href="/newlist" asChild>
         <Pressable style={styles.createButton}>
-          <Text style={styles.createButtonText}>创建新清单</Text>
+      <Text style={styles.createButtonText}>新しいリストを作成</Text>
         </Pressable>
       </Link>
     </View>

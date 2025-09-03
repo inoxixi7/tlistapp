@@ -14,21 +14,21 @@ import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 
 const DESTINATIONS = [
-  '东京',
+  '東京',
   '大阪',
   '京都',
   '北海道',
-  '福冈',
-  '冲绳',
+  '福岡',
+  '沖縄',
 ];
 
 const TRAVEL_PURPOSES = [
-  '观光',
-  '购物',
-  '美食',
-  '商务',
-  '探亲',
-  '休闲',
+  '観光',
+  'ショッピング',
+  'グルメ',
+  'ビジネス',
+  '帰省',
+  'レジャー',
 ];
 
 export default function NewListScreen() {
@@ -41,6 +41,30 @@ export default function NewListScreen() {
   const [children, setChildren] = useState(0);
     const [purpose, setPurpose] = useState('');
     const [listName, setListName] = useState('');
+
+  // 日期输入框的受控字符串，避免点击/清空时将 Date 设为 Invalid
+  const pad2 = (n: number) => n.toString().padStart(2, '0');
+  const formatDate = (d: Date) => {
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  };
+  const tryParseDate = (txt: string): Date | null => {
+    const s = txt.trim();
+    if (!s) return null;
+    const m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+    if (m) {
+      const y = parseInt(m[1], 10);
+      const mo = parseInt(m[2], 10) - 1;
+      const da = parseInt(m[3], 10);
+      const d = new Date(y, mo, da);
+      if (d.getFullYear() === y && d.getMonth() === mo && d.getDate() === da) return d;
+      return null;
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const [startDateInput, setStartDateInput] = useState(formatDate(new Date()));
+  const [endDateInput, setEndDateInput] = useState(formatDate(new Date()));
 
   // 这个函数只在原生应用上被调用（当前 Web 输入使用，因此暂不使用）
   // const onDateChange = (_event: any, selectedDate?: Date) => {
@@ -61,8 +85,9 @@ export default function NewListScreen() {
       pathname: '/recommendedlist', // 目标页面的路径名
       params: {
         destination,
-        startDate: startDate.toISOString(), // 将日期转换为字符串以便传递
-        endDate: endDate.toISOString(),     // 将日期转换为字符串以便传递
+        // 使用 ISO 字符串；若无效则使用输入框 YYYY-MM-DD
+        startDate: isNaN(startDate.getTime()) ? startDateInput : startDate.toISOString(),
+        endDate: isNaN(endDate.getTime()) ? endDateInput : endDate.toISOString(),
         adults,
         children,
           purpose,
@@ -73,14 +98,14 @@ export default function NewListScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>新的清单</Text>
+  <Text style={styles.header}>新しいリスト</Text>
 
       {/* 清单名称 */}
       <View style={styles.inputContainer}>
-        <Text style={styles.label}>清单名称</Text>
+        <Text style={styles.label}>リスト名</Text>
           <TextInput
             style={styles.input}
-            placeholder="例如：日本旅行计划"
+            placeholder="例：日本旅行プラン"
             value={listName}
             onChangeText={setListName}
           />
@@ -93,7 +118,7 @@ export default function NewListScreen() {
           <Picker
             selectedValue={destination}
             onValueChange={(itemValue) => setDestination(itemValue)}>
-            <Picker.Item label="请选择目的地" value="" />
+            <Picker.Item label="目的地を選択" value="" />
             {DESTINATIONS.map((dest) => (
               <Picker.Item key={dest} label={dest} value={dest} />
             ))}
@@ -101,24 +126,32 @@ export default function NewListScreen() {
         </View>
       </View>
 
-      {/* 出发日和结束日 - 在 Web 上可以手动输入 */}
+    {/* 出发日和结束日 - 在 Web 上可以手动输入 */}
       <View style={styles.dateRow}>
         <View style={styles.dateContainer}>
-          <Text style={styles.label}>出发日</Text>
+      <Text style={styles.label}>出発日</Text>
           <TextInput
             style={styles.input}
             placeholder="YYYY-MM-DD"
-            value={startDate.toLocaleDateString()}
-            onChangeText={(text) => setStartDate(new Date(text))}
+            value={startDateInput}
+            onChangeText={(text) => {
+              setStartDateInput(text);
+              const d = tryParseDate(text);
+              if (d) setStartDate(d);
+            }}
           />
         </View>
         <View style={styles.dateContainer}>
-          <Text style={styles.label}>结束日</Text>
+      <Text style={styles.label}>終了日</Text>
           <TextInput
             style={styles.input}
             placeholder="YYYY-MM-DD"
-            value={endDate.toLocaleDateString()}
-            onChangeText={(text) => setEndDate(new Date(text))}
+            value={endDateInput}
+            onChangeText={(text) => {
+              setEndDateInput(text);
+              const d = tryParseDate(text);
+              if (d) setEndDate(d);
+            }}
           />
         </View>
       </View>
@@ -141,7 +174,7 @@ export default function NewListScreen() {
           </Pressable>
         </View>
         <View style={styles.counterContainer}>
-          <Text style={styles.counterLabel}>小孩</Text>
+          <Text style={styles.counterLabel}>子ども</Text>
           <Pressable
             style={styles.counterButton}
             onPress={() => setChildren((prev) => Math.max(0, prev - 1))}>
@@ -163,7 +196,7 @@ export default function NewListScreen() {
           <Picker
             selectedValue={purpose}
             onValueChange={(itemValue) => setPurpose(itemValue)}>
-            <Picker.Item label="请选择目的" value="" />
+            <Picker.Item label="目的を選択" value="" />
             {TRAVEL_PURPOSES.map((p) => (
               <Picker.Item key={p} label={p} value={p} />
             ))}
@@ -171,8 +204,8 @@ export default function NewListScreen() {
         </View>
       </View>
 
-      {/* 调用 handleSave 函数 */}
-      <Button title="保存清单" onPress={handleSave} />
+  {/* 调用 handleSave 函数 */}
+  <Button title="リストを保存" onPress={handleSave} />
     </View>
   );
 }

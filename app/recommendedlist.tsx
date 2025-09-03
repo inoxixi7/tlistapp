@@ -7,26 +7,42 @@ import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Collapsible } from '@/components/Collapsible';
 import { useList } from './context/ListContext';
 
-// 辅助函数，用于计算旅行天数
+// 辅助函数：健壮解析日期（支持 YYYY-MM-DD / YYYY/MM/DD / ISO）
+function parseDateSafe(s?: string): Date | null {
+  if (!s) return null;
+  const m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+  if (m) {
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10) - 1;
+    const da = parseInt(m[3], 10);
+    const d = new Date(y, mo, da);
+    if (d.getFullYear() === y && d.getMonth() === mo && d.getDate() === da) return d;
+    return null;
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// 辅助函数，用于计算旅行天数（无效输入返回 0）
 function getDuration(startDate?: string, endDate?: string): number {
-  if (!startDate || !endDate) return 0;
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const start = parseDateSafe(startDate);
+  const end = parseDateSafe(endDate);
+  if (!start || !end) return 0;
   const diffTime = Math.abs(end.getTime() - start.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
+  return Number.isFinite(diffDays) ? diffDays : 0;
 }
 
 
 // 固定分类模板：可按需微调
 const CATEGORY_TEMPLATE: Record<string, string[]> = {
-  证件: ['护照/签证', '身份证', '驾照', '现金/信用卡'],
-  行程票券: ['机票/车票', '酒店预订单'],
-  洗漱用品: ['牙刷牙膏', '洗面奶', '毛巾', '剃须刀', '护肤品'],
-  衣物: ['换洗衣物', '内衣袜子', '外套', '鞋子'],
-  电子设备: ['手机及充电器', '相机', '移动电源', '转换插头', '耳机'],
-  药品: ['常用药品', '创可贴', '感冒药', '止泻药'],
-  其他: ['雨伞', '水壶', '太阳镜']
+  証件: ['パスポート/ビザ', '運転免許証', '現金/クレジットカード'],
+  行程・チケット: ['航空券/乗車券', 'ホテル予約確認'],
+  洗面用具: ['歯ブラシ・歯磨き粉', '洗顔料', 'タオル', 'カミソリ', 'スキンケア'],
+  衣類: ['着替え', '下着・靴下', 'アウター', '靴'],
+  電子機器: ['スマホ・充電器', 'カメラ', 'モバイルバッテリー', '変換プラグ', 'イヤホン'],
+  医薬品: ['常備薬', '絆創膏', '風邪薬', '胃腸薬'],
+  その他: ['折りたたみ傘', '水筒', 'サングラス']
 };
 
 export default function RecommendedListScreen() {
@@ -44,7 +60,7 @@ export default function RecommendedListScreen() {
   const nStartDate = norm(startDate);
   const nEndDate = norm(endDate);
   const nPurpose = norm(purpose);
-  const nListName = norm(listName) || '日本旅行计划';
+  const nListName = norm(listName) || '日本旅行プラン';
 
   const parsedAdults = Number(norm(adults)) || 0;
   const parsedChildren = Number(norm(children)) || 0;
@@ -59,14 +75,14 @@ export default function RecommendedListScreen() {
       if (snapshot && !Array.isArray(snapshot)) {
         map = snapshot as Record<string, string[]>;
       } else {
-        // 从旧 items[] 回退：将未知项放入“其他”
+    // 从旧 items[] 回退：将未知项放入“その他”
         const fallbacks: Record<string, string[]> = JSON.parse(JSON.stringify(CATEGORY_TEMPLATE));
         const items = (Array.isArray(snapshot) ? snapshot : []) as string[];
         const templateAll = new Set(Object.values(CATEGORY_TEMPLATE).flat());
         for (const it of items) {
           if (!templateAll.has(it)) {
-            if (!fallbacks['其他']) fallbacks['其他'] = [];
-            if (!fallbacks['其他'].includes(it)) fallbacks['其他'].push(it);
+      if (!fallbacks['その他']) fallbacks['その他'] = [];
+      if (!fallbacks['その他'].includes(it)) fallbacks['その他'].push(it);
           }
         }
         map = fallbacks;
@@ -170,7 +186,7 @@ export default function RecommendedListScreen() {
   // 在导航栏右侧添加一个保存按钮，并根据 listName 动态设置标题
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: nListName || '推荐清单',
+      title: nListName || 'おすすめリスト',
       headerRight: () => (
         <Pressable onPress={handleSave}>
           <Text style={styles.headerButton}>保存</Text>
@@ -181,19 +197,19 @@ export default function RecommendedListScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.header}>为你推荐的旅行清单</Text>
+    <Text style={styles.header}>あなたへのおすすめ旅行リスト</Text>
       <View style={styles.summaryContainer}>
         <Text style={styles.summaryText}>
-          <Text style={styles.label}>出行人数:</Text>
-          {parsedAdults}个大人, {parsedChildren}个小孩
+      <Text style={styles.label}>人数:</Text>
+      大人{parsedAdults}名・子ども{parsedChildren}名
         </Text>
         <Text style={styles.summaryText}>
-          <Text style={styles.label}>旅行天数:</Text>
-          {duration}天
+      <Text style={styles.label}>日数:</Text>
+      {duration}日
         </Text>
         <Text style={styles.summaryText}>
-          <Text style={styles.label}>旅行目的:</Text>
-          {nPurpose || '未选择'}
+      <Text style={styles.label}>旅行目的:</Text>
+      {nPurpose || '未選択'}
         </Text>
       </View>
       <View style={styles.listContainer}>
@@ -230,7 +246,7 @@ export default function RecommendedListScreen() {
                 <View style={styles.addRow}>
                   <TextInput
                     style={styles.addInput}
-                    placeholder={`在“${sec.title}”添加自定义项目`}
+                    placeholder={`「${sec.title}」にカスタム項目を追加`}
                     value={newItemText}
                     onChangeText={setNewItemText}
                   />
@@ -251,7 +267,7 @@ export default function RecommendedListScreen() {
                       setNewItemText('');
                     }}
                   >
-                    <Text style={styles.addButtonText}>添加</Text>
+                    <Text style={styles.addButtonText}>追加</Text>
                   </Pressable>
                 </View>
               </Collapsible>
