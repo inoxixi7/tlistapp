@@ -1,7 +1,7 @@
 // app/(tabs)/index.tsx
 import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useList } from '../context/ListContext';
 
 export default function HomeScreen() {
@@ -26,6 +26,14 @@ export default function HomeScreen() {
   const handleAskDelete = (id: string) => {
     const item = lists.find((l) => l.id === id);
     if (!item) return;
+    // Web 使用原生 confirm，原生端使用 Alert.alert
+    if (Platform.OS === 'web') {
+      const ok = typeof globalThis !== 'undefined' && (globalThis as any).confirm
+        ? (globalThis as any).confirm(`「${item.listName}」を削除しますか？`)
+        : false;
+      if (ok) removeList(id);
+      return;
+    }
     Alert.alert('リストを削除', `「${item.listName}」を削除しますか？`, [
       { text: 'キャンセル', style: 'cancel' },
       { text: '削除', style: 'destructive', onPress: () => removeList(id) },
