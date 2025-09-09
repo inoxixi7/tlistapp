@@ -27,13 +27,17 @@ Web 平台添加应用，记录以下配置值：
 apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId
 认证允许的来源/重定向域名加上你的本地/部署地址（例如 http://localhost:8081, http://localhost:19006 或你的域名）
 环境变量（Expo 支持 EXPO_PUBLIC_*）
-在项目根目录创建 .env 文件（示例值请替换）
+在项目根目录创建 .env 文件（可参考 .env.example，示例值请替换）
 EXPO_PUBLIC_FIREBASE_API_KEY=xxx
 EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=xxx.firebaseapp.com
 EXPO_PUBLIC_FIREBASE_PROJECT_ID=xxx
 EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=xxx.appspot.com
 EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=xxx
 EXPO_PUBLIC_FIREBASE_APP_ID=1:xxxx:web:xxxx
+EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=G-XXXXXXX
+EXPO_PUBLIC_IOS_GOOGLE_CLIENT_ID=xxxx-ios.apps.googleusercontent.com
+EXPO_PUBLIC_ANDROID_GOOGLE_CLIENT_ID=xxxx-android.apps.googleusercontent.com
+EXPO_PUBLIC_WEB_GOOGLE_CLIENT_ID=xxxx-web.apps.googleusercontent.com
 Firestore 规则（示例，按需加强）
 仅允许已登录用户读写自己的数据：users/{uid}/** where request.auth.uid == uid
 使用方式
@@ -44,11 +48,12 @@ Web 环境点击“Googleでログイン”，授权后会自动同步
 后续：本地/云端双向合并（此版采用简单覆盖式 upsert）
 平台说明与后续优化
 Web 登录已就绪（使用 signInWithPopup）
-原生端（iOS/Android）建议用 expo-auth-session 集成 Google 登录，以获得最佳体验；当前代码使用 signInWithRedirect 是简化处理，在 Expo Go 中可能受限
+原生端（iOS/Android）已接入 expo-auth-session 获取 Google ID Token 并换取 Firebase Credential；需要在 Google Cloud Console 配置 iOS/Android/Web OAuth 客户端，并在 .env 写入对应 Client ID。
 同步策略目前是简单覆盖式，若需冲突分辨/增量合并，可引入“最后写入 wins + 版本戳/变更日志”策略
 变更文件
 新增：firebase.ts, AuthContext.tsx, CloudSync.tsx
 修改：_layout.tsx, settings.tsx
+新增：.env.example（环境变量样例）
 要求覆盖情况：
 
 登录入口与展示（Done）

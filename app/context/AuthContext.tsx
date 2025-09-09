@@ -1,15 +1,10 @@
 // app/context/AuthContext.tsx
-import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { auth } from '@/app/lib/firebase';
-import {
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signInWithPopup,
-  signInWithRedirect,
-  signOut,
-  type User,
-} from 'firebase/auth';
-import { Platform } from 'react-native';
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut, type User } from 'firebase/auth';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Alert, Platform } from 'react-native';
+
+// 仅 Web 支持登录；原生端暂时禁用
 
 type AuthCtx = {
   user: User | null;
@@ -37,14 +32,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
-    if (!auth) return;
-    const provider = new GoogleAuthProvider();
-    if (Platform.OS === 'web') {
-      await signInWithPopup(auth, provider);
-    } else {
-      // 原生端可用 redirect（简化处理），生产可接入 expo-auth-session
-      await signInWithRedirect(auth, provider);
+    if (!auth) {
+      if (Platform.OS === 'web') {
+        // Web 端用原生 alert，避免某些环境下 Alert 不显示
+        window.alert('Firebase 未初始化：请在项目根目录创建 .env，填入 EXPO_PUBLIC_FIREBASE_*，并重启 dev server。');
+        console.error('[Auth] Firebase auth not initialized. Check .env and restart dev server.');
+      } else {
+        Alert.alert('未配置 Firebase', '请检查 .env 是否填好 EXPO_PUBLIC_FIREBASE_* 并重启开发服务。');
+      }
+      return;
     }
+  const provider = new GoogleAuthProvider();
+  if (Platform.OS === 'web') {
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (e: any) {
+        // 浏览器拦截弹窗或用户快速点击导致的冲突时，回退到 redirect 流程
+        const code = e?.code as string | undefined;
+        if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
+          await signInWithRedirect(auth, provider);
+        } else {
+          throw e;
+        }
+      }
+      return;
+    }
+  Alert.alert('移动端暂不支持', '当前仅支持在 Web 端登录，请在浏览器中使用。');
   }, []);
 
   const logout = useCallback(async () => {
