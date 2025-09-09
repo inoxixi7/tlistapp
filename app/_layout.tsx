@@ -15,6 +15,7 @@ export default function RootLayout() {
             <Stack.Screen name="recommendedlist" options={{ title: 'おすすめリスト', headerRight: () => null }} />
             <Stack.Screen name="login" options={{ title: 'ログイン' }} />
             <Stack.Screen name="register" options={{ title: '新規登録' }} />
+            <Stack.Screen name="terms" options={{ title: '利用規約' }} />
           </Stack>
         </CloudSync>
       </ListProvider>

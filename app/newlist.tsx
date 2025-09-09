@@ -1,15 +1,7 @@
 // app/newlist.tsx
+import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import {
-  Alert,
-  Button,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 // 导入 DateTimePicker 和 Picker
 import { Picker } from '@react-native-picker/picker';
 // 导入 useRouter
@@ -39,8 +31,8 @@ export default function NewListScreen() {
   const [destination, setDestination] = useState('');
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
-    const [purpose, setPurpose] = useState('');
-    const [listName, setListName] = useState('');
+  const [purpose, setPurpose] = useState('');
+  const [listName, setListName] = useState('');
 
   // 日期输入框的受控字符串，避免点击/清空时将 Date 设为 Invalid
   const pad2 = (n: number) => n.toString().padStart(2, '0');
@@ -93,19 +85,12 @@ export default function NewListScreen() {
     return errs;
   };
 
+  // 校验：用于禁用保存按钮
   const isValidForm = getValidationErrors().length === 0;
 
   const handleSave = () => {
     const errs = getValidationErrors();
-    if (errs.length > 0) {
-      const message = errs.join('\n');
-      if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined' && (window as any).alert) (window as any).alert(message);
-      } else {
-        Alert.alert('入力エラー', message);
-      }
-      return;
-    }
+    if (errs.length > 0) return;
     // 使用 router.push() 导航并传递参数（此时已校验通过）
     const s = tryParseDate(startDateInput)!;
     const e = tryParseDate(endDateInput)!;
@@ -125,110 +110,107 @@ export default function NewListScreen() {
 
   return (
     <View style={styles.container}>
-  {/* <Text style={styles.header}>新しいリスト</Text> */}
+      <View style={styles.card}>
+        <Text style={styles.title}>新しいリスト</Text>
 
-      {/* 清单名称 */}
-      <View style={styles.inputContainer}>
-        <Text style={styles.label}>リスト名</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="例：日本旅行プラン"
-            value={listName}
-            onChangeText={setListName}
-          />
-      </View>
+        <ScrollView contentContainerStyle={{ paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
+          {/* 清单名称 */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>リスト名</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="例：日本旅行プラン"
+              value={listName}
+              onChangeText={(v) => setListName(v)}
+            />
+          </View>
 
-      {/* 目的地选择 */}
-      <View style={styles.inputContainer}>
-        <Text style={styles.label}>目的地</Text>
-        <View style={styles.pickerContainer}>
-          <Picker
-            selectedValue={destination}
-            onValueChange={(itemValue) => setDestination(itemValue)}>
-            <Picker.Item label="目的地を選択" value="" />
-            {DESTINATIONS.map((dest) => (
-              <Picker.Item key={dest} label={dest} value={dest} />
-            ))}
-          </Picker>
-        </View>
-      </View>
+          {/* 目的地选择 */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>目的地</Text>
+            <View style={styles.pickerContainer}>
+              <Picker selectedValue={destination} onValueChange={(itemValue) => setDestination(itemValue)}>
+                <Picker.Item label="目的地を選択" value="" />
+                {DESTINATIONS.map((dest) => (
+                  <Picker.Item key={dest} label={dest} value={dest} />
+                ))}
+              </Picker>
+            </View>
+          </View>
 
-    {/* 出发日和结束日 - 在 Web 上可以手动输入 */}
-      <View style={styles.dateRow}>
-        <View style={styles.dateContainer}>
-      <Text style={styles.label}>出発日</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="YYYY-MM-DD"
-            value={startDateInput}
-            onChangeText={(text) => {
-              setStartDateInput(text);
-            }}
-          />
-        </View>
-        <View style={styles.dateContainer}>
-      <Text style={styles.label}>終了日</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="YYYY-MM-DD"
-            value={endDateInput}
-            onChangeText={(text) => {
-              setEndDateInput(text);
-            }}
-          />
-        </View>
-      </View>
+          {/* 出发日和结束日 */}
+          <View style={styles.dateRow}>
+            <View style={styles.dateContainer}>
+              <Text style={styles.label}>出発日</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD"
+                value={startDateInput}
+                onChangeText={(text) => setStartDateInput(text)}
+              />
+            </View>
+            <View style={styles.dateContainer}>
+              <Text style={styles.label}>終了日</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD"
+                value={endDateInput}
+                onChangeText={(text) => setEndDateInput(text)}
+              />
+            </View>
+          </View>
 
-      {/* 人数选择 */}
-      <View style={styles.row}>
-        <Text style={styles.label}>人数</Text>
-        <View style={styles.counterContainer}>
-          <Text style={styles.counterLabel}>大人</Text>
+          {/* 人数选择 */}
+          <View style={styles.rowBetween}>
+            <Text style={styles.label}>人数</Text>
+            <View style={{ flexDirection: 'row', gap: 16 }}>
+              <View style={styles.counterContainer}>
+                <Text style={styles.counterLabel}>大人</Text>
+                <Pressable style={[styles.counterButton, styles.counterBtnGhost]} onPress={() => setAdults((prev) => Math.max(0, prev - 1))}>
+                  <Ionicons name="remove" size={18} color="#111827" />
+                </Pressable>
+                <Text style={styles.counterText}>{adults}</Text>
+                <Pressable style={[styles.counterButton, styles.counterBtnPrimary]} onPress={() => setAdults((prev) => prev + 1)}>
+                  <Ionicons name="add" size={18} color="#fff" />
+                </Pressable>
+              </View>
+              <View style={styles.counterContainer}>
+                <Text style={styles.counterLabel}>子ども</Text>
+                <Pressable style={[styles.counterButton, styles.counterBtnGhost]} onPress={() => setChildren((prev) => Math.max(0, prev - 1))}>
+                  <Ionicons name="remove" size={18} color="#111827" />
+                </Pressable>
+                <Text style={styles.counterText}>{children}</Text>
+                <Pressable style={[styles.counterButton, styles.counterBtnPrimary]} onPress={() => setChildren((prev) => prev + 1)}>
+                  <Ionicons name="add" size={18} color="#fff" />
+                </Pressable>
+              </View>
+            </View>
+          </View>
+
+          {/* 旅行目的选择 */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>旅行目的</Text>
+            <View style={styles.pickerContainer}>
+              <Picker selectedValue={purpose} onValueChange={(itemValue) => setPurpose(itemValue)}>
+                <Picker.Item label="目的を選択" value="" />
+                {TRAVEL_PURPOSES.map((p) => (
+                  <Picker.Item key={p} label={p} value={p} />
+                ))}
+              </Picker>
+            </View>
+          </View>
+
+          {/* 保存按钮 */}
           <Pressable
-            style={styles.counterButton}
-            onPress={() => setAdults((prev) => Math.max(0, prev - 1))}>
-            <Text style={styles.buttonText}>-</Text>
+            style={[styles.btn, isValidForm ? styles.btnPrimary : styles.btnDisabled]}
+            onPress={handleSave}
+            disabled={!isValidForm}
+          >
+            <Ionicons name="save-outline" size={18} color="#fff" />
+            <Text style={styles.btnTextLight}>リストを保存</Text>
           </Pressable>
-          <Text style={styles.counterText}>{adults}</Text>
-          <Pressable
-            style={styles.counterButton}
-            onPress={() => setAdults((prev) => prev + 1)}>
-            <Text style={styles.buttonText}>+</Text>
-          </Pressable>
-        </View>
-        <View style={styles.counterContainer}>
-          <Text style={styles.counterLabel}>子ども</Text>
-          <Pressable
-            style={styles.counterButton}
-            onPress={() => setChildren((prev) => Math.max(0, prev - 1))}>
-            <Text style={styles.buttonText}>-</Text>
-          </Pressable>
-          <Text style={styles.counterText}>{children}</Text>
-          <Pressable
-            style={styles.counterButton}
-            onPress={() => setChildren((prev) => prev + 1)}>
-            <Text style={styles.buttonText}>+</Text>
-          </Pressable>
-        </View>
+        </ScrollView>
       </View>
-
-      {/* 旅行目的选择 */}
-      <View style={styles.inputContainer}>
-        <Text style={styles.label}>旅行目的</Text>
-        <View style={styles.pickerContainer}>
-          <Picker
-            selectedValue={purpose}
-            onValueChange={(itemValue) => setPurpose(itemValue)}>
-            <Picker.Item label="目的を選択" value="" />
-            {TRAVEL_PURPOSES.map((p) => (
-              <Picker.Item key={p} label={p} value={p} />
-            ))}
-          </Picker>
-        </View>
-      </View>
-
-  {/* 调用 handleSave 函数 */}
-  <Button title="リストを保存" onPress={handleSave} disabled={!isValidForm} />
     </View>
   );
 }
@@ -236,36 +218,47 @@ export default function NewListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 20,
+    // backgroundColor: '#fff',
+  },
+  card: {
+    width: '100%',
+    maxWidth: 520,
     backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
-  header: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
+  title: { fontSize: 20, fontWeight: '800', marginBottom: 12, color: '#1f2d3d' },
   inputContainer: {
     marginBottom: 20,
     width: '100%',
   },
   label: {
-    fontSize: 16,
-    marginBottom: 5,
+    fontSize: 14,
+    marginBottom: 6,
+    color: '#374151',
   },
   input: {
+    height: 44,
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 5,
-    padding: 10,
+    borderColor: '#e5e9f0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
     width: '100%',
   },
   pickerContainer: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 5,
+    borderColor: '#e5e9f0',
+    borderRadius: 10,
   },
-  row: {
+  rowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -283,27 +276,35 @@ const styles = StyleSheet.create({
   counterContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
+    // backgroundColor: 'rgba(243, 244, 246, 1)',
+    borderRadius: 999,
     paddingHorizontal: 10,
   },
   counterLabel: {
     marginRight: 10,
   },
   counterButton: {
-    backgroundColor: '#e0e0e0',
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  buttonText: {
-    fontSize: 20,
-    color: '#000',
-  },
+  counterBtnGhost: { backgroundColor: '#e5e7eb' },
+  counterBtnPrimary: { backgroundColor: 'dodgerblue' },
   counterText: {
     fontSize: 18,
     marginHorizontal: 15,
   },
+  btn: {
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  btnPrimary: { backgroundColor: 'dodgerblue' },
+  btnDisabled: { backgroundColor: '#9ca3af' },
+  btnTextLight: { color: '#fff', fontWeight: '700' },
 });

@@ -6,7 +6,7 @@ import { Stack, useRouter } from 'expo-router';
 import { deleteUser, updateProfile } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import React from 'react';
-import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -209,15 +209,38 @@ export default function RegisterScreen() {
         {!!password2Error && <Text style={styles.errorText}>{password2Error}</Text>}
 
         <View style={styles.termsRow}>
-          <Switch
-            value={agreed}
-            onValueChange={(v) => {
-              setAgreed(v);
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: agreed }}
+            onPress={() => {
+              setAgreed(!agreed);
               if (termsError) setTermsError(null);
               if (formError) setFormError(null);
             }}
-          />
-          <Text style={{ marginLeft: 8 }}>利用規約に同意します</Text>
+            style={styles.checkboxIcon}
+            hitSlop={10}
+          >
+            <Ionicons
+              name={agreed ? 'checkbox' : 'square-outline'}
+              size={22}
+              color={agreed ? 'dodgerblue' : '#6b7280'}
+            />
+          </Pressable>
+          <View style={styles.labelRow}>
+            <Pressable onPress={() => router.push({ pathname: '/terms' })} hitSlop={8}>
+              <Text style={styles.termsLink}>利用規約</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setAgreed(!agreed);
+                if (termsError) setTermsError(null);
+                if (formError) setFormError(null);
+              }}
+              hitSlop={8}
+            >
+              <Text>に同意します</Text>
+            </Pressable>
+          </View>
         </View>
         {!!termsError && <Text style={styles.errorText}>{termsError}</Text>}
 
@@ -264,6 +287,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 8,
+  },
+  checkboxIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  termsLink: {
+    color: 'dodgerblue',
+    marginLeft: 8,
+    fontWeight: '600',
   },
   btn: {
     height: 44,
