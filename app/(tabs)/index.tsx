@@ -163,7 +163,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>マイ旅行リスト</Text>
+      {/* <Text style={styles.title}>マイ旅行リスト</Text> */}
       {lists.length === 0 ? (
         <Text style={styles.placeholder}>保存されたリストはまだありません。<br />まずは作成してみましょう！</Text>
       ) : (
