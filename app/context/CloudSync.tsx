@@ -15,10 +15,17 @@ import { useList, type TravelList } from './ListContext';
 
 export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const { lists, upsertList, removeList, clearAll } = useList();
+  const { lists, upsertList, clearAll } = useList();
   const bootstrapped = useRef(false);
   const lastCloudApplyTs = useRef(0);
   const permErrorShown = useRef(false);
+  const listsRef = useRef<TravelList[]>([]);
+  const isApplyingFromCloud = useRef(false);
+  const upsertRef = useRef(upsertList);
+  const clearAllRef = useRef(clearAll);
+
+  useEffect(() => { upsertRef.current = upsertList; }, [upsertList]);
+  useEffect(() => { clearAllRef.current = clearAll; }, [clearAll]);
 
   const showPermError = (err: unknown) => {
     if (permErrorShown.current) return;
@@ -34,6 +41,11 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
   // 记录详细错误以便调试
   console.error('[CloudSync] Firestore permission error', err);
   };
+
+  // 始终保留最新 lists，供订阅回调中使用，避免闭包捕获旧值
+  useEffect(() => {
+    listsRef.current = lists;
+  }, [lists]);
 
   useEffect(() => {
     if (!user || !db) return;
@@ -56,17 +68,22 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
         return;
       }
 
+      // 为新的订阅重置引导标志
+      bootstrapped.current = false;
+
       // 简化：拉取 lists 子集合的一个 onSnapshot 后再决定初始化策略
       unsub = onSnapshot(
         listsCol,
         async (snap) => {
           try {
+            isApplyingFromCloud.current = true;
             if (!bootstrapped.current) {
               bootstrapped.current = true;
               if (snap.empty) {
                 // 云端为空 -> 上传本地列表
+                const currentLists = listsRef.current;
                 await Promise.all(
-                  lists.map((l) =>
+                  currentLists.map((l) =>
                     setDoc(
                       doc(listsCol, l.id),
                       {
@@ -79,24 +96,24 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
                 );
               } else {
                 // 云端有数据 -> 用云覆盖本地（简单粗暴）
-                clearAll();
+                clearAllRef.current();
                 snap.forEach((d) => {
                   const data = d.data() as TravelList;
-                  if (data && data.id) upsertList(data);
+                  if (data && data.id) upsertRef.current(data);
                 });
               }
-              lastCloudApplyTs.current = Date.now();
-              return;
+            } else {
+              // 非首次：增量应用云端变化（这里只是覆盖式 upsert）
+              snap.forEach((d) => {
+                const data = d.data() as TravelList;
+                if (data && data.id) upsertRef.current(data);
+              });
             }
-
-            // 非首次：增量应用云端变化（这里只是覆盖式 upsert）
-            snap.forEach((d) => {
-              const data = d.data() as TravelList;
-              if (data && data.id) upsertList(data);
-            });
             lastCloudApplyTs.current = Date.now();
           } catch (e) {
             showPermError(e);
+          } finally {
+            isApplyingFromCloud.current = false;
           }
         },
         (err) => {
@@ -108,19 +125,21 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
     return () => {
       if (unsub) unsub();
     };
-  }, [user, lists, upsertList, clearAll, removeList]);
+  }, [user]);
 
   // 监听本地 lists 变化并上传到云（登录状态下）
   useEffect(() => {
     if (!user || !db) return;
+    if (isApplyingFromCloud.current) return; // 避免处理云端驱动的本地更新
     const uid = user.uid;
     const listsCol = collection(db, 'users', uid, 'lists');
     (async () => {
       try {
-        // 如果刚从云端应用了更改，短时间内跳过一次上传，避免回声循环
-        if (Date.now() - lastCloudApplyTs.current < 500) return;
+        const currentLists = listsRef.current;
+        const toUpload = currentLists.filter((l) => typeof l.updatedAt === 'number' && l.updatedAt > lastCloudApplyTs.current);
+        if (toUpload.length === 0) return;
         await Promise.all(
-          lists.map((l) =>
+          toUpload.map((l) =>
             setDoc(
               doc(listsCol, l.id),
               {
@@ -135,7 +154,7 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
         showPermError(e);
       }
     })();
-  }, [user, lists]);
+  }, [user, lists.length]);
 
   return <>{children}</>;
 };

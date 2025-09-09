@@ -5,7 +5,10 @@ import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, Vi
 // 导入 useLocalSearchParams 和 useRouter
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 // 导入 useList
+import { db } from '@/app/lib/firebase';
 import { Collapsible } from '@/components/Collapsible';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { useAuth } from './context/AuthContext';
 import { useList } from './context/ListContext';
 
 // 辅助函数：健壮解析日期（支持 YYYY-MM-DD / YYYY/MM/DD / ISO）
@@ -53,6 +56,7 @@ export default function RecommendedListScreen() {
   const navigation = useNavigation();
   const params = useLocalSearchParams();
   const { upsertList, getById } = useList(); // 使用 useList 钩子
+  const { user } = useAuth();
 
   const { id, destination, startDate, endDate, adults, children, purpose, listName, checkedItems: incomingChecked } = params as Record<string, string | string[]>;
 
@@ -171,7 +175,7 @@ export default function RecommendedListScreen() {
     }));
   };
   
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     // 校验编辑项
     const errs = getValidationErrors();
     if (errs.length > 0) {
@@ -219,15 +223,35 @@ export default function RecommendedListScreen() {
   categories,
     };
 
+    // 先更新本地
     upsertList(listSummary);
-    router.replace('/');
+
+    // 同步到云端（即刻写入）
+    try {
+      if (user && db) {
+        const now = Date.now();
+        const existing = nId ? getById(nId) : undefined;
+        const toUpload = {
+          ...listSummary,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          _syncedAt: serverTimestamp(),
+        };
+        await setDoc(doc(db, 'users', user.uid, 'lists', lid), toUpload, { merge: true });
+      }
+    } catch (e) {
+      console.warn('[recommendedlist] save to cloud failed', e);
+      // 静默失败，不阻断返回
+    }
+
+    router.back();
     // 实际的参数传递，需要通过 context 或全局状态管理
     // router.setParams({ savedList: listSummary });
     // 由于 Expo Router 的 router.back() 不支持直接传参，我们可以在 home 页面监听导航事件或使用全局状态。
     // 为了简单起见，我们暂时先模拟一个返回操作，稍后通过全局状态来完善。
     // 在实际项目中，可以使用 Jotai, Zustand 或 Redux 来存储状态。
     // 这里我们先不处理传递逻辑，仅返回。
-  }, [sections, nId, nDestination, nListName, checkedItems, upsertList, router, editAdults, editChildren, editEndDateInput, editPurpose, editStartDateInput, getValidationErrors]);
+  }, [sections, nId, nDestination, nListName, checkedItems, upsertList, router, editAdults, editChildren, editEndDateInput, editPurpose, editStartDateInput, getValidationErrors, getById, user]);
 
   // 在导航栏右侧添加一个保存按钮，并根据 listName 动态设置标题
   useLayoutEffect(() => {

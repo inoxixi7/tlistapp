@@ -1,14 +1,56 @@
 // app/(tabs)/index.tsx
+import { db } from '@/app/lib/firebase';
+import { useFocusEffect } from '@react-navigation/native';
 import { Link, useRouter } from 'expo-router';
+import { collection, getDocs } from 'firebase/firestore';
 import React, { useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 import { useList } from '../context/ListContext';
 
 export default function HomeScreen() {
-  const { lists, removeList, upsertList } = useList();
+  const { lists, removeList, upsertList, clearAll } = useList();
+  const { user } = useAuth();
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState<string>('');
+  const clearAllRef = React.useRef(clearAll);
+  const upsertRef = React.useRef(upsertList);
+  const listsRef = React.useRef(lists);
+  React.useEffect(() => { clearAllRef.current = clearAll; }, [clearAll]);
+  React.useEffect(() => { upsertRef.current = upsertList; }, [upsertList]);
+  React.useEffect(() => { listsRef.current = lists; }, [lists]);
+
+  // 回到首页时主动从云端拉取，确保显示最新
+  useFocusEffect(
+    React.useCallback(() => {
+      let active = true;
+      (async () => {
+        try {
+          if (!user || !db) return;
+          const uid = user.uid;
+          const snap = await getDocs(collection(db, 'users', uid, 'lists'));
+          if (!active) return;
+          // 合并：仅当云端文档较新或本地不存在时覆盖，避免清空本地导致竞态
+          const localMap = new Map<string, any>(listsRef.current.map((it: any) => [it.id, it]));
+          snap.forEach((d) => {
+            const cloud = d.data() as any;
+            if (!cloud || !cloud.id) return;
+            const local = localMap.get(cloud.id);
+            const cloudTs = typeof cloud.updatedAt === 'number' ? cloud.updatedAt : 0;
+            const localTs = local && typeof local.updatedAt === 'number' ? local.updatedAt : -1;
+            if (!local || cloudTs >= localTs) {
+              upsertRef.current(cloud);
+            }
+          });
+        } catch (e) {
+          // 静默失败，避免打扰；CloudSync 仍在后台监听
+          console.warn('[Home] refresh from cloud failed', e);
+        }
+      })();
+      return () => { active = false; };
+    }, [user])
+  );
 
   const handleEdit = (id: string) => {
     const item = lists.find((l) => l.id === id);
