@@ -1,3 +1,6 @@
+// 文件用途：
+// - 底部 Tab 布局，仅包含 Home(index) 与 Settings 两个标签页。
+// - 图标通过自定义 IconSymbol 实现 iOS/Android/Web 一致表现。
 // app/(tabs)/_layout.tsx
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Tabs } from 'expo-router';

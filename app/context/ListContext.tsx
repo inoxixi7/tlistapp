@@ -1,3 +1,6 @@
+// 文件用途：
+// - 维护旅行清单的本地状态与持久化（AsyncStorage），并提供 CRUD API。
+// - 支持老版本数据格式的迁移；提供 upsert/remove/clearAll/getById。
 // app/context/ListContext.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';

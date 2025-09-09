@@ -1,3 +1,6 @@
+// 文件用途：
+// - 通用（跨端）Firebase 初始化：从 EXPO_PUBLIC_* 环境变量读取配置，导出 auth/db。
+// - 原生端使用此文件；Web 端由 firebase.web.ts 覆盖。
 // app/lib/firebase.ts
 // Firebase 初始化：从 EXPO_PUBLIC_* 环境变量读取配置；在原生端启用 AsyncStorage 持久化。
 import { FirebaseApp, getApps, initializeApp } from 'firebase/app';

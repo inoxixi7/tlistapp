@@ -1,3 +1,5 @@
+// 文件用途：
+// - 展示应用的“利用规约”内容；从注册页与其他位置可跳转到此页面查看。
 // app/terms.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';

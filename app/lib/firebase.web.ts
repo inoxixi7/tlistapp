@@ -1,3 +1,6 @@
+// 文件用途：
+// - Web 端专用 Firebase 初始化（硬编码配置，便于快速开发演示）。
+// - 若要改为 .env，请迁移到通用实现 app/lib/firebase.ts。
 // app/lib/firebase.web.ts
 // Web 专用的 Firebase 初始化（使用你提供的硬编码配置）。
 import { getAnalytics, isSupported, type Analytics } from 'firebase/analytics';

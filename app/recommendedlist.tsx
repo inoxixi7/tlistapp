@@ -1,3 +1,7 @@
+// 文件用途：
+// - 根据 newlist 传入的参数生成“推荐物品清单”，并允许分类、勾选与新增条目。
+// - 支持从已保存清单进入编辑（通过 id 与 checkedItems 参数恢复状态）。
+// - 保存会写入本地（AsyncStorage，通过 ListContext），并在登录态下同步到 Firestore。
 // app/recommendedlist.tsx
 import { Picker } from '@react-native-picker/picker';
 import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';

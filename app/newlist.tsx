@@ -1,3 +1,6 @@
+// 文件用途：
+// - 创建旅行清单的表单：名称、目的地、日期、人数、旅行目的。
+// - 按需校验，表单不完整时禁用“保存”；通过后跳转到 recommendedlist 生成清单。
 // app/newlist.tsx
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';

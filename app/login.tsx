@@ -1,3 +1,7 @@
+// 文件用途：
+// - 登录页面。支持邮箱或用户名 + 密码登录，以及 Google 登录（Web）。
+// - 提供“忘记密码”“从用户名显示邮箱”辅助功能。
+// - 登录成功后跳转回主 Tab。
 // app/login.tsx
 import { useAuth } from '@/app/context/AuthContext';
 import { auth, db } from '@/app/lib/firebase';

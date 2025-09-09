@@ -1,84 +1,194 @@
-# tlistapp
+# TList App
 
-## 配置 Firebase 与 Google 登录
+Language · 言語 · 语言
 
-1) 在项目根目录创建 `.env`（可复制 `.env.example` 并替换为你自己的值）：
+- 中文: README.zh-CN.md
+- 日本語: README.ja.md
+- English: README.en.md
 
-- EXPO_PUBLIC_FIREBASE_API_KEY
-- EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN
-- EXPO_PUBLIC_FIREBASE_PROJECT_ID
-- EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET
-- EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-- EXPO_PUBLIC_FIREBASE_APP_ID
-- EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID (可选)
-- EXPO_PUBLIC_IOS_GOOGLE_CLIENT_ID
-- EXPO_PUBLIC_ANDROID_GOOGLE_CLIENT_ID
-- EXPO_PUBLIC_WEB_GOOGLE_CLIENT_ID
+---
 
-2) Firebase 控制台
+This repository contains a travel packing list app built with Expo Router and Firebase. Select your preferred language above to read full documentation.
 
-- 启用 Authentication › Google 登录
-- 允许的来源/重定向域名加入本地/部署地址（如 http://localhost:19006）
-- Firestore 规则：仅允许用户访问 `users/{uid}/**`（示例，可按需加强）
+MIT License © Contributors
+- 开发与运行 / 開発と実行 / Development & Run
+- Firestore 规则示例 / ルール例 / Rules Example
+- 注意事项 / 注意 / Notes
 
-3) app.json 中已含 `scheme: "my"` 与 Android intentFilters；如需自定义 scheme，请同步更新 Google OAuth 的重定向配置。
+---
 
-4) 运行
+## 简介 · 概览 (ZH)
+TList 是一个跨平台的旅行清单应用：
+- 支持用户名或邮箱登录、Google 登录；
+- 注册时写入唯一“用户名 → 邮箱”映射；
+- 新建行程，生成推荐物品清单，分类勾选与编辑；
+- 本地持久化，登录后自动与 Firestore 云同步。
 
-```bash
-npm start
+## 概要 (JA)
+TList は、旅行用チェックリストアプリです：
+- ユーザー名/メールでのログイン、Google ログイン；
+- 登録時にユーザー名→メールの一意マッピングを保存；
+- 新規作成から推奨リストを生成、分類/チェック/編集；
+- ローカル保存に加え、ログイン時は Firestore と自動同期。
+
+## Overview (EN)
+TList is a travel packing list app:
+- Sign in with username or email, plus Google auth;
+- On registration, it saves a unique username→email mapping;
+- Create a trip to generate a recommended packing list; categorize, check, and edit items;
+- Persists locally and auto-syncs with Firestore when signed in.
+
+---
+
+## 功能特性 / 機能 / Features
+- 登录/注册（邮箱或用户名 + 密码），Google 登录（Web）
+   - Login/Sign up (email or username + password), Google login (Web)
+   - ログイン/新規登録（メールまたはユーザー名 + パスワード）、Google ログイン（Web）
+- 忘记密码（支持用户名找回邮箱）
+   - Forgot password (resolve email from username)
+   - パスワード再設定（ユーザー名→メール解決）
+- 新建清单（目的地、日期、人数、目的），推荐清单生成与编辑
+   - Create list (destination, dates, people, purpose), generate and edit recommended list
+   - 行程作成（目的地、日付、人数、目的）、推奨リスト生成・編集
+- 本地持久化（AsyncStorage）与云同步（Firestore users/{uid}/lists）
+   - Local persistence + cloud sync
+   - ローカル保存 + クラウド同期
+- 设置页鉴权拦截（未登录跳转登录页）
+   - Settings gate: redirect to login when unauthenticated
+   - 設定画面は未ログイン時ログインへ遷移
+
+---
+
+## 项目结构 / 構成 / Structure
+```
+app/
+   _layout.tsx           # Root Stack + Providers (Auth/List/CloudSync)
+   +not-found.tsx
+   login.tsx             # Login (email/username, Google, helpers)
+   register.tsx          # Register (ToS checkbox, username mapping)
+   newlist.tsx           # Create trip form → push to recommendedlist
+   recommendedlist.tsx   # Generate/edit categorized list, save/sync
+   terms.tsx             # Terms of Service page
+   (tabs)/
+      _layout.tsx         # Tabs: Home(index), Settings
+      index.tsx           # Home: list cards, edit/open/delete
+      settings.tsx        # Settings: local prefs + cloud sync note
+   context/
+      AuthContext.tsx     # Auth state & methods
+      ListContext.tsx     # Local lists state + AsyncStorage
+      CloudSync.tsx       # Firestore sync (users/{uid}/lists)
+   lib/
+      firebase.ts         # Cross-platform Firebase init (env)
+      firebase.web.ts     # Web-only Firebase init (hardcoded)
 ```
 
-Web 上点击“Googleでログイン”使用 Firebase Popup；iOS/Android 上使用 expo-auth-session 发起 Google OAuth 并换取 Firebase 凭证。
+---
 
-安全提示：不要把真实密钥硬编码到源码里，放入 .env（EXPO_PUBLIC_*）即可，见 `app/lib/firebase.ts`。
-# Welcome to your Expo app 👋
+## 技术栈 / 技術スタック / Tech Stack
+- Expo 53, Expo Router 5, React Native 0.79, React 19
+- Firebase Auth + Firestore
+- AsyncStorage（本地持久化）
+- IconSymbol（跨端图标适配），Ionicons
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+---
 
-## Get started
+## 认证与数据 / 認証とデータ / Auth & Data
+- 认证
+   - 邮箱/密码 与 Google（Web 弹窗，阻止时回退 redirect）；
+   - 支持用户名登录：通过 `usernames/{usernameLower}` 映射到邮箱；
+   - 注册成功后更新 displayName，并写入映射：`{ email, ownerUid, createdAt }`。
+- 数据
+   - 本地：`ListContext` 通过 AsyncStorage 持久化；
+   - 云端：登录后自动同步到 `users/{uid}/lists/*`；
+   - 设置页：`users/{uid}/settings`。
 
-1. Install dependencies
+注意：仓库中提供了 `firestore.rules` 示例，部署后方可写入用户名映射与用户清单。
 
-   ```bash
-   npm install
-   ```
+---
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
+## 开发与运行 (ZH)
+1) 安装依赖
 ```bash
-npm run reset-project
+npm install
+```
+2) 配置 Firebase（任选其一）
+- 方式 A：使用 `.env`（推荐，跨端通用）并编辑 `app/lib/firebase.ts`
+   - EXPO_PUBLIC_FIREBASE_API_KEY, EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      EXPO_PUBLIC_FIREBASE_PROJECT_ID, EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, EXPO_PUBLIC_FIREBASE_APP_ID,
+      EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID (可选)
+- 方式 B：仅 Web 开发使用 `app/lib/firebase.web.ts` 的硬编码配置
+
+3) 启动开发服务器
+```bash
+npx expo start
+```
+可通过 Web/iOS/Android 预览（Google 登录完整支持 Web）。
+
+## 開発と実行 (JA)
+1) 依存関係のインストール
+```bash
+npm install
+```
+2) Firebase 設定（どちらか）
+- A: `.env` で共通初期化（推奨）
+- B: Web のみ `app/lib/firebase.web.ts` を使用
+
+# TList App 语言索引
+3) 実行
+```bash
+npx expo start
+1) Install
+npm install
+```
+2) Configure Firebase via `.env` or use `firebase.web.ts` for Web only
+3) Start
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+---
 
-## Learn more
+## Firestore 规则示例 / ルール例 / Rules Example
+将以下内容部署到 Firestore 规则（或参考本仓库根目录的 `firestore.rules`）：
 
-To learn more about developing your project with Expo, look at the following resources:
+```rules
+rules_version = '2';
+service cloud.firestore {
+   match /databases/{database}/documents {
+      // Per-user data under users/{uid}/...
+      match /users/{uid}/{document=**} {
+         allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+      // Public username -> account mapping. Claimed once and immutable.
+      match /usernames/{username} {
+         allow read: if true;
+         allow create: if request.auth != null
+            && !exists(/databases/$(database)/documents/usernames/$(username))
+            && request.resource.data.ownerUid == request.auth.uid
+            && request.resource.data.keys().hasOnly(['email', 'ownerUid', 'createdAt'])
+            && request.resource.data.email is string
+            && request.resource.data.ownerUid is string
+            && (request.resource.data.createdAt is timestamp || !('createdAt' in request.resource.data));
+         allow update, delete: if false;
+      }
+   }
+}
+```
 
-## Join the community
+要点 / ポイント / Notes:
+- usernames 集合仅允许首次创建，且必须带上 `ownerUid` 与 `email`；禁止更新/删除，防止被接管。
+- 用户数据仅允许 `request.auth.uid == uid` 访问。
 
-Join our community of developers creating universal apps.
+---
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 注意事项 / 注意 / Notes
+- Secrets：不要把真实密钥写入代码，使用 `.env`（EXPO_PUBLIC_*）。
+- Google 登录：Web 使用 Popup，若被拦截自动回退到 Redirect。
+- 权限错误：若注册时报错“permission-denied”，请部署上述 Firestore 规则。
+- 日期格式：输入/显示优先 `YYYY-MM-DD`，解析做了兼容。
+- 同步策略：首次登录若云端为空会上载本地；云端有数据会覆盖本地（简化版）。
+
+---
+
+MIT License © Contributors

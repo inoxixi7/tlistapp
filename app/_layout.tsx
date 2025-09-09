@@ -1,3 +1,7 @@
+// 文件用途：
+// - 应用根部的 Stack 布局与全局 Provider 注入。
+// - 注入 AuthProvider（认证）、ListProvider（清单本地存储）、CloudSync（云同步）。
+// - 在此集中声明可直接通过路径访问的页面（newlist/recommendedlist/login/register/terms）。
 // app/_layout.tsx
 import { Stack } from 'expo-router';
 import { AuthProvider } from './context/AuthContext';

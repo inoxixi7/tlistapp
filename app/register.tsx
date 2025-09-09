@@ -1,3 +1,7 @@
+// 文件用途：
+// - 新规注册页面：用户名、邮箱、密码、确认密码与同意条款。
+// - 校验通过后在 Firebase Auth 创建用户，并写入 Firestore 的 usernames/{usernameLower} 映射。
+// - 写入映射失败会回滚删除刚创建的账号，避免“账号已创建但用户名未占用”。
 // app/register.tsx
 import { useAuth } from '@/app/context/AuthContext';
 import { auth, db } from '@/app/lib/firebase';

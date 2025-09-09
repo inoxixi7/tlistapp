@@ -1,3 +1,6 @@
+// 文件用途：
+// - 全局认证上下文：维护 user/loading，提供 Google/邮箱登录与注册、登出方法。
+// - 仅 Web 启用实际登录流程；原生端做了温和提示。
 // app/context/AuthContext.tsx
 import { auth } from '@/app/lib/firebase';
 import { GoogleAuthProvider, createUserWithEmailAndPassword, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, type User } from 'firebase/auth';

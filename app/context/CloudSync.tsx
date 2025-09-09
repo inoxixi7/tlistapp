@@ -1,3 +1,7 @@
+// 文件用途：
+// - 在登录状态下，把本地清单与 Firestore 的 users/{uid}/lists 做基础同步（订阅+增量写入）。
+// - 首次登录：云端为空则上载本地；云端有数据则覆盖本地。
+// - 非首次：订阅云端变更并覆盖本地相同项；本地修改会合并写回云端。
 // app/context/CloudSync.tsx
 import { db } from '@/app/lib/firebase';
 import { collection, deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
