@@ -1,10 +1,63 @@
 // app/(tabs)/settings.tsx
 import { useAuth } from '@/app/context/AuthContext';
+import { db } from '@/app/lib/firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import * as React from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 export default function TabTwoScreen() {
   const { user, loading, signInWithGoogle, logout } = useAuth();
+  const [notificationsEnabled, setNotificationsEnabled] = React.useState<boolean>(true);
+  const [defaultSort, setDefaultSort] = React.useState<'updatedAt' | 'createdAt' | 'name'>('updatedAt');
+  const [autoExpandFirst, setAutoExpandFirst] = React.useState<boolean>(true);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem('app.settings.prefs');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed?.notificationsEnabled === 'boolean') setNotificationsEnabled(parsed.notificationsEnabled);
+          if (parsed?.defaultSort === 'updatedAt' || parsed?.defaultSort === 'createdAt' || parsed?.defaultSort === 'name') setDefaultSort(parsed.defaultSort);
+          if (typeof parsed?.autoExpandFirst === 'boolean') setAutoExpandFirst(parsed.autoExpandFirst);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // 登录后尝试从云端加载用户设置
+  React.useEffect(() => {
+    (async () => {
+      if (!user || !db) return;
+      try {
+        const snap = await getDoc(doc(db, 'users', user.uid, 'settings'));
+        if (snap.exists()) {
+          const data: any = snap.data();
+          if (typeof data?.notificationsEnabled === 'boolean') setNotificationsEnabled(data.notificationsEnabled);
+          if (data?.defaultSort === 'updatedAt' || data?.defaultSort === 'createdAt' || data?.defaultSort === 'name') setDefaultSort(data.defaultSort);
+          if (typeof data?.autoExpandFirst === 'boolean') setAutoExpandFirst(data.autoExpandFirst);
+        }
+      } catch {}
+    })();
+  }, [user]);
+
+  // 本地持久化 + 云端同步
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const payload = { notificationsEnabled, defaultSort, autoExpandFirst };
+        await AsyncStorage.setItem('app.settings.prefs', JSON.stringify(payload));
+        if (user && db) {
+          await setDoc(
+            doc(db, 'users', user.uid, 'settings'),
+            { ...payload, updatedAt: serverTimestamp() },
+            { merge: true }
+          );
+        }
+      } catch {}
+    })();
+  }, [notificationsEnabled, defaultSort, autoExpandFirst, user]);
   return (
     <View style={styles.container}>
       {/* <Text style={styles.title}>設定</Text> */}
@@ -29,10 +82,45 @@ export default function TabTwoScreen() {
             </View>
             <View style={styles.divider} />
             <Text style={styles.helpText}>ログイン中は旅行リストがクラウドと自動同期されます。</Text>
-            <Pressable style={[styles.btn, styles.btnNeutral]} onPress={logout}>
-              <Text style={styles.btnTextDark}>ログアウト</Text>
-            </Pressable>
+            <View style={styles.prefRow}>
+              <Text style={styles.prefLabel}>通知</Text>
+              <Switch value={notificationsEnabled} onValueChange={setNotificationsEnabled} />
+            </View>
+            <Text style={[styles.helpText, { marginTop: 4 }]}>偏好設定</Text>
+            {/* <View style={styles.prefRow}>
+              <Text style={styles.prefLabel}>デフォルト並び順</Text>
+              <View style={styles.segmentWrap}>
+                <Pressable
+                  onPress={() => setDefaultSort('updatedAt')}
+                  style={[styles.segmentBtn, defaultSort === 'updatedAt' && styles.segmentBtnActive]}
+                >
+                  <Text style={[styles.segmentText, defaultSort === 'updatedAt' && styles.segmentTextActive]}>更新</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setDefaultSort('createdAt')}
+                  style={[styles.segmentBtn, defaultSort === 'createdAt' && styles.segmentBtnActive]}
+                >
+                  <Text style={[styles.segmentText, defaultSort === 'createdAt' && styles.segmentTextActive]}>作成</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setDefaultSort('name')}
+                  style={[styles.segmentBtn, defaultSort === 'name' && styles.segmentBtnActive]}
+                >
+                  <Text style={[styles.segmentText, defaultSort === 'name' && styles.segmentTextActive]}>名前</Text>
+                </Pressable>
+              </View>
+            </View>
+            <View style={styles.prefRow}>
+              <Text style={styles.prefLabel}>最初のセクションを自動で展開</Text>
+              <Switch value={autoExpandFirst} onValueChange={setAutoExpandFirst} />
+            </View> */}
           </View>
+          <Pressable
+            style={[styles.btn, styles.btnNeutral, { marginTop: 16, width: '100%', maxWidth: 520 }]}
+            onPress={logout}
+          >
+            <Text style={styles.btnTextDark}>ログアウト</Text>
+          </Pressable>
         </>
       ) : (
         <>
@@ -65,6 +153,7 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 520,
+    height: 800,
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
@@ -97,4 +186,37 @@ const styles = StyleSheet.create({
   btnNeutral: { backgroundColor: '#eef2f6' },
   btnTextLight: { color: '#fff', fontWeight: '700' },
   btnTextDark: { color: '#1f2d3d', fontWeight: '700' },
+  prefRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  prefLabel: { fontSize: 16, color: '#1f2d3d' },
+  pickerSmallWrap: {
+    flex: 1,
+    marginLeft: 12,
+    borderWidth: 1,
+    borderColor: '#e5e9f0',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  segmentWrap: {
+    flexDirection: 'row',
+    backgroundColor: '#eef2f6',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  segmentBtn: {
+    paddingHorizontal: 12,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentBtnActive: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+  },
+  segmentText: { color: '#405065', fontWeight: '600' },
+  segmentTextActive: { color: '#1f2d3d', fontWeight: '700' },
 });
