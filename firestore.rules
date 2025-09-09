@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Per-user data under users/{uid}/...
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Public username -> account mapping. Claimed once and immutable.
+    match /usernames/{username} {
+      // Allow read so clients can resolve username -> email during login/recovery.
+      allow read: if true;
+
+      // Allow only the first write by the authenticated owner.
+      allow create: if request.auth != null
+        // only if not already taken
+        && !exists(/databases/$(database)/documents/usernames/$(username))
+        // enforce ownership field
+        && request.resource.data.ownerUid == request.auth.uid
+        // constrain allowed fields and types
+        && request.resource.data.keys().hasOnly(['email', 'ownerUid', 'createdAt'])
+        && request.resource.data.email is string
+        && request.resource.data.ownerUid is string
+        && request.resource.data.createdAt is timestamp;
+
+      // Disallow updates/deletes to prevent takeovers.
+      allow update, delete: if false;
+    }
+  }
+}

@@ -1,17 +1,26 @@
 // app/login.tsx
 import { useAuth } from '@/app/context/AuthContext';
+import { auth, db } from '@/app/lib/firebase';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import React from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 export default function LoginScreen() {
-  const { user, loading, signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth();
+  const { user, loading, signInWithGoogle, signInWithEmail } = useAuth();
   const router = useRouter();
 
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
+  const [emailError, setEmailError] = React.useState<string | null>(null);
+  const [passwordError, setPasswordError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = React.useState<string | null>(null);
+
+  const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
   React.useEffect(() => {
     if (!loading && user) {
@@ -23,22 +32,153 @@ export default function LoginScreen() {
   const onLogin = async () => {
     try {
       setSubmitting(true);
-      await signInWithEmail(email.trim(), password);
+      setFormError(null);
+      setInfoMessage(null);
+      setEmailError(null);
+      setPasswordError(null);
+      const e = email.trim();
+      const p = password;
+      let hasErr = false;
+      if (!e) {
+        setEmailError('メールアドレスまたはユーザー名を入力してください。');
+        hasErr = true;
+      } else if (e.includes('@') && !isEmail(e)) {
+        setEmailError('メールアドレスの形式が正しくありません。');
+        hasErr = true;
+      }
+      if (!p) {
+        setPasswordError('パスワードを入力してください。');
+        hasErr = true;
+      }
+      if (hasErr) return;
+
+      if (e.includes('@') || isEmail(e)) {
+        await signInWithEmail(e, p);
+      } else {
+        // treat as username: map to email via Firestore
+        if (!db) {
+          setFormError('サーバー設定を確認してください。');
+          return;
+        }
+        const snap = await getDoc(doc(db, 'usernames', e.toLowerCase()));
+        if (!snap.exists()) {
+          setFormError('ユーザー名が見つかりません。');
+          return;
+        }
+        const data: any = snap.data();
+        const mappedEmail: string | undefined = data?.email;
+        if (!mappedEmail) {
+          setFormError('ユーザー名に関連付けられたメールが見つかりません。');
+          return;
+        }
+        await signInWithEmail(mappedEmail, p);
+      }
       router.replace({ pathname: '/(tabs)' });
     } catch (e: any) {
-      Alert.alert('ログイン失敗', e?.message || 'メールとパスワードをご確認ください。');
+      const code: string | undefined = e?.code;
+      let msg = 'メールとパスワードをご確認ください。';
+      if (code === 'auth/invalid-email') msg = 'メールアドレスの形式が正しくありません。';
+      else if (code === 'auth/user-not-found') msg = 'ユーザーが見つかりません。新規登録してください。';
+      else if (code === 'auth/wrong-password') msg = 'パスワードが正しくありません。';
+      else if (code === 'auth/too-many-requests') msg = '試行回数が多すぎます。しばらくしてからお試しください。';
+      else if (code === 'auth/network-request-failed') msg = 'ネットワークエラーが発生しました。接続をご確認ください。';
+      setFormError(msg);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const onRegister = async () => {
+  const onRegister = () => {
+    router.push({ pathname: '/register' });
+  };
+
+  const maskEmail = (em: string) => {
+    const [local, domain] = em.split('@');
+    if (!local || !domain) return em;
+    const maskedLocal = local.length <= 2 ? local[0] + '*' : local[0] + '***';
+    const parts = domain.split('.');
+    const maskedDomain = parts[0].length <= 2 ? parts[0][0] + '*' : parts[0][0] + '***';
+    const tld = parts.slice(1).join('.') || '';
+    return `${maskedLocal}@${maskedDomain}${tld ? '.' + tld : ''}`;
+  };
+
+  const onForgotPassword = async () => {
     try {
       setSubmitting(true);
-      await signUpWithEmail(email.trim(), password);
-      router.replace({ pathname: '/(tabs)' });
+      setFormError(null);
+      setInfoMessage(null);
+      const identifier = email.trim();
+      if (!identifier) {
+        setEmailError('メールアドレスまたはユーザー名を入力してください。');
+        return;
+      }
+      let targetEmail = identifier;
+      if (!identifier.includes('@')) {
+        // username -> email
+        if (!db) {
+          setFormError('サーバー設定を確認してください。');
+          return;
+        }
+        const snap = await getDoc(doc(db, 'usernames', identifier.toLowerCase()));
+        if (!snap.exists()) {
+          setFormError('ユーザー名が見つかりません。');
+          return;
+        }
+        targetEmail = (snap.data() as any)?.email;
+        if (!targetEmail) {
+          setFormError('ユーザー名に関連付けられたメールが見つかりません。');
+          return;
+        }
+      } else if (!isEmail(identifier)) {
+        setEmailError('メールアドレスの形式が正しくありません。');
+        return;
+      }
+      if (!auth) {
+        setFormError('サーバー設定を確認してください。');
+        return;
+      }
+      await sendPasswordResetEmail(auth, targetEmail);
+      setInfoMessage(`パスワード再設定メールを送信しました：${maskEmail(targetEmail)}`);
     } catch (e: any) {
-      Alert.alert('新規登録失敗', e?.message || '入力内容をご確認ください。');
+      const code: string | undefined = e?.code;
+      let msg = 'メール送信に失敗しました。しばらくしてからお試しください。';
+      if (code === 'auth/user-not-found') msg = '該当するアカウントが見つかりません。';
+      else if (code === 'auth/invalid-email') msg = 'メールアドレスの形式が正しくありません。';
+      else if (code === 'auth/missing-email') msg = 'メールアドレスを入力してください。';
+      else if (code === 'auth/network-request-failed') msg = 'ネットワークエラーが発生しました。接続をご確認ください。';
+      setFormError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const onRevealEmailFromUsername = async () => {
+    try {
+      setSubmitting(true);
+      setFormError(null);
+      setInfoMessage(null);
+      const identifier = email.trim();
+      if (!identifier || identifier.includes('@')) {
+        setEmailError('ユーザー名を入力してください。');
+        return;
+      }
+      if (!db) {
+        setFormError('サーバー設定を確認してください。');
+        return;
+      }
+      const snap = await getDoc(doc(db, 'usernames', identifier.toLowerCase()));
+      if (!snap.exists()) {
+        setFormError('ユーザー名が見つかりません。');
+        return;
+      }
+      const mappedEmail: string | undefined = (snap.data() as any)?.email;
+      if (!mappedEmail) {
+        setFormError('ユーザー名に関連付けられたメールが見つかりません。');
+        return;
+      }
+      setInfoMessage(`登録メール: ${maskEmail(mappedEmail)}`);
+    } catch {
+      setFormError('処理に失敗しました。もう一度お試しください。');
     } finally {
       setSubmitting(false);
     }
@@ -66,20 +206,31 @@ export default function LoginScreen() {
         <TextInput
           style={styles.input}
           value={email}
-          onChangeText={setEmail}
-          placeholder="メールアドレス"
+          onChangeText={(t) => {
+            setEmail(t);
+            if (emailError) setEmailError(null);
+            if (formError) setFormError(null);
+          }}
+          placeholder="メールアドレス または ユーザー名"
           autoCapitalize="none"
           keyboardType="email-address"
           textContentType="emailAddress"
         />
+        {!!emailError && <Text style={styles.errorText}>{emailError}</Text>}
         <TextInput
           style={styles.input}
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(t) => {
+            setPassword(t);
+            if (passwordError) setPasswordError(null);
+            if (formError) setFormError(null);
+          }}
           placeholder="パスワード"
           secureTextEntry
           textContentType="password"
         />
+        {!!passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
+        {!!formError && <Text style={[styles.errorText, { marginTop: 4 }]}>{formError}</Text>}
         <View style={{ height: 8 }} />
         <Pressable style={[styles.btn, styles.btnPrimary]} onPress={onLogin} disabled={submitting}>
           <Text style={styles.btnTextLight}>ログイン</Text>
@@ -88,6 +239,15 @@ export default function LoginScreen() {
         <Pressable style={[styles.btn, styles.btnSecondary]} onPress={onRegister} disabled={submitting}>
           <Text style={styles.btnTextLight}>新規登録</Text>
         </Pressable>
+        <View style={{ height: 12 }} />
+        <Pressable onPress={onForgotPassword} disabled={submitting}>
+          <Text style={{ color: 'dodgerblue', textAlign: 'center' }}>パスワードをお忘れですか？</Text>
+        </Pressable>
+        <View style={{ height: 6 }} />
+        <Pressable onPress={onRevealEmailFromUsername} disabled={submitting}>
+          <Text style={{ color: 'dodgerblue', textAlign: 'center' }}>ユーザー名から登録メールを確認</Text>
+        </Pressable>
+        {!!infoMessage && <Text style={[styles.infoText, { marginTop: 8, textAlign: 'center' }]}>{infoMessage}</Text>}
         <View style={styles.divider} />
         <Pressable style={[styles.btn, styles.btnGoogle]} onPress={signInWithGoogle} disabled={submitting}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -140,4 +300,6 @@ const styles = StyleSheet.create({
   btnGoogle: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e9f0' },
   btnTextLight: { color: '#fff', fontWeight: '700' },
   btnTextDark: { color: '#1f2d3d', fontWeight: '700' },
+  errorText: { color: '#e11900', marginBottom: 6 },
+  infoText: { color: '#0b6e4f' },
 });
