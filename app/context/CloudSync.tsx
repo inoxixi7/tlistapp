@@ -1,6 +1,6 @@
 // app/context/CloudSync.tsx
 import { db } from '@/app/lib/firebase';
-import { collection, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import React, { useEffect, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
 import { useAuth } from './AuthContext';
@@ -21,6 +21,7 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
   const permErrorShown = useRef(false);
   const listsRef = useRef<TravelList[]>([]);
   const isApplyingFromCloud = useRef(false);
+  const prevIdsRef = useRef<Set<string>>(new Set());
   const upsertRef = useRef(upsertList);
   const clearAllRef = useRef(clearAll);
 
@@ -136,6 +137,20 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
     (async () => {
       try {
         const currentLists = listsRef.current;
+        // 先处理删除：找出上一次存在但当前已不存在的 ID
+        const prevIds = prevIdsRef.current;
+        const currentIds = new Set(currentLists.map((l) => l.id));
+        const removedIds: string[] = [];
+        prevIds.forEach((id) => { if (!currentIds.has(id)) removedIds.push(id); });
+
+        if (removedIds.length > 0) {
+          await Promise.all(
+            removedIds.map((id) => deleteDoc(doc(listsCol, id)).catch((e) => {
+              console.warn('[CloudSync] delete cloud doc failed', id, e);
+            }))
+          );
+        }
+
         const toUpload = currentLists.filter((l) => typeof l.updatedAt === 'number' && l.updatedAt > lastCloudApplyTs.current);
         if (toUpload.length === 0) return;
         await Promise.all(
@@ -152,6 +167,9 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
         );
       } catch (e) {
         showPermError(e);
+      } finally {
+        // 更新 prevIds 快照
+        prevIdsRef.current = new Set(listsRef.current.map((l) => l.id));
       }
     })();
   }, [user, lists.length]);

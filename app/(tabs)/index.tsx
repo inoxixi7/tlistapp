@@ -2,7 +2,7 @@
 import { db } from '@/app/lib/firebase';
 import { useFocusEffect } from '@react-navigation/native';
 import { Link, useRouter } from 'expo-router';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
 import React, { useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
@@ -73,12 +73,45 @@ export default function HomeScreen() {
       const ok = typeof globalThis !== 'undefined' && (globalThis as any).confirm
         ? (globalThis as any).confirm(`「${item.listName}」を削除しますか？`)
         : false;
-      if (ok) removeList(id);
+      if (ok) {
+        if (user && db) {
+          // 先删云端，再删本地，避免回流
+          (async () => {
+            try {
+              await deleteDoc(doc(db, 'users', user.uid, 'lists', id));
+            } catch (e) {
+              console.warn('[Home] delete cloud doc failed', e);
+            } finally {
+              removeList(id);
+            }
+          })();
+        } else {
+          removeList(id);
+        }
+      }
       return;
     }
     Alert.alert('リストを削除', `「${item.listName}」を削除しますか？`, [
       { text: 'キャンセル', style: 'cancel' },
-      { text: '削除', style: 'destructive', onPress: () => removeList(id) },
+      {
+        text: '削除',
+        style: 'destructive',
+        onPress: () => {
+          if (user && db) {
+            (async () => {
+              try {
+                await deleteDoc(doc(db, 'users', user.uid, 'lists', id));
+              } catch (e) {
+                console.warn('[Home] delete cloud doc failed', e);
+              } finally {
+                removeList(id);
+              }
+            })();
+          } else {
+            removeList(id);
+          }
+        },
+      },
     ]);
   };
 

@@ -244,7 +244,7 @@ export default function RecommendedListScreen() {
       // 静默失败，不阻断返回
     }
 
-    router.back();
+  router.replace('/');
     // 实际的参数传递，需要通过 context 或全局状态管理
     // router.setParams({ savedList: listSummary });
     // 由于 Expo Router 的 router.back() 不支持直接传参，我们可以在 home 页面监听导航事件或使用全局状态。
