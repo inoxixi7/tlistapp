@@ -2,15 +2,17 @@
 import { useAuth } from '@/app/context/AuthContext';
 import { db } from '@/app/lib/firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import * as React from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 export default function TabTwoScreen() {
-  const { user, loading, signInWithGoogle, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = React.useState<boolean>(true);
   const [defaultSort, setDefaultSort] = React.useState<'updatedAt' | 'createdAt' | 'name'>('updatedAt');
   const [autoExpandFirst, setAutoExpandFirst] = React.useState<boolean>(true);
+  const router = useRouter();
 
   React.useEffect(() => {
     (async () => {
@@ -58,12 +60,18 @@ export default function TabTwoScreen() {
       } catch {}
     })();
   }, [notificationsEnabled, defaultSort, autoExpandFirst, user]);
+  // 未登录时跳转到登录页
+  React.useEffect(() => {
+    if (!loading && !user) {
+  router.push({ pathname: '/login' });
+    }
+  }, [loading, user, router]);
   return (
     <View style={styles.container}>
       {/* <Text style={styles.title}>設定</Text> */}
-      {loading ? (
+      {loading || !user ? (
         <ActivityIndicator />
-      ) : user ? (
+      ) : (
         <>
           <View style={styles.card}>
             <View style={styles.rowCenter}>
@@ -87,33 +95,6 @@ export default function TabTwoScreen() {
               <Switch value={notificationsEnabled} onValueChange={setNotificationsEnabled} />
             </View>
             <Text style={[styles.helpText, { marginTop: 4 }]}>偏好設定</Text>
-            {/* <View style={styles.prefRow}>
-              <Text style={styles.prefLabel}>デフォルト並び順</Text>
-              <View style={styles.segmentWrap}>
-                <Pressable
-                  onPress={() => setDefaultSort('updatedAt')}
-                  style={[styles.segmentBtn, defaultSort === 'updatedAt' && styles.segmentBtnActive]}
-                >
-                  <Text style={[styles.segmentText, defaultSort === 'updatedAt' && styles.segmentTextActive]}>更新</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setDefaultSort('createdAt')}
-                  style={[styles.segmentBtn, defaultSort === 'createdAt' && styles.segmentBtnActive]}
-                >
-                  <Text style={[styles.segmentText, defaultSort === 'createdAt' && styles.segmentTextActive]}>作成</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setDefaultSort('name')}
-                  style={[styles.segmentBtn, defaultSort === 'name' && styles.segmentBtnActive]}
-                >
-                  <Text style={[styles.segmentText, defaultSort === 'name' && styles.segmentTextActive]}>名前</Text>
-                </Pressable>
-              </View>
-            </View>
-            <View style={styles.prefRow}>
-              <Text style={styles.prefLabel}>最初のセクションを自動で展開</Text>
-              <Switch value={autoExpandFirst} onValueChange={setAutoExpandFirst} />
-            </View> */}
           </View>
           <Pressable
             style={[styles.btn, styles.btnNeutral, { marginTop: 16, width: '100%', maxWidth: 520 }]}
@@ -121,15 +102,6 @@ export default function TabTwoScreen() {
           >
             <Text style={styles.btnTextDark}>ログアウト</Text>
           </Pressable>
-        </>
-      ) : (
-        <>
-          <View style={styles.card}>
-            <Text style={styles.helpText}>ログインすると、他のデバイスでも同じリストを利用できます。</Text>
-            <Pressable style={[styles.btn, styles.btnPrimary]} onPress={signInWithGoogle}>
-              <Text style={styles.btnTextLight}>Googleでログイン</Text>
-            </Pressable>
-          </View>
         </>
       )}
     </View>
@@ -153,7 +125,7 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 520,
-    height: 800,
+    maxHeight: '90%',
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
@@ -183,7 +155,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   btnPrimary: { backgroundColor: 'dodgerblue' },
-  btnNeutral: { backgroundColor: '#eef2f6' },
+  btnNeutral: { backgroundColor: '#e70d0db1' },
   btnTextLight: { color: '#fff', fontWeight: '700' },
   btnTextDark: { color: '#1f2d3d', fontWeight: '700' },
   prefRow: {

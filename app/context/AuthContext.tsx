@@ -1,6 +1,6 @@
 // app/context/AuthContext.tsx
 import { auth } from '@/app/lib/firebase';
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut, type User } from 'firebase/auth';
+import { GoogleAuthProvider, createUserWithEmailAndPassword, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, type User } from 'firebase/auth';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 
@@ -10,6 +10,8 @@ type AuthCtx = {
   user: User | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -60,12 +62,47 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   Alert.alert('移动端暂不支持', '当前仅支持在 Web 端登录，请在浏览器中使用。');
   }, []);
 
+  const signInWithEmail = useCallback(async (email: string, password: string) => {
+    if (!auth) {
+      if (Platform.OS === 'web') {
+        window.alert('Firebase 未初始化：请检查 .env 并重启 dev server。');
+      } else {
+        Alert.alert('未配置 Firebase', '请检查 .env 是否填好 EXPO_PUBLIC_FIREBASE_* 并重启开发服务。');
+      }
+      return;
+    }
+    if (Platform.OS !== 'web') {
+      Alert.alert('移动端暂不支持', '当前仅支持在 Web 端登录，请在浏览器中使用。');
+      return;
+    }
+    await signInWithEmailAndPassword(auth, email, password);
+  }, []);
+
+  const signUpWithEmail = useCallback(async (email: string, password: string) => {
+    if (!auth) {
+      if (Platform.OS === 'web') {
+        window.alert('Firebase 未初始化：请检查 .env 并重启 dev server。');
+      } else {
+        Alert.alert('未配置 Firebase', '请检查 .env 是否填好 EXPO_PUBLIC_FIREBASE_* 并重启开发服务。');
+      }
+      return;
+    }
+    if (Platform.OS !== 'web') {
+      Alert.alert('移动端暂不支持', '当前仅支持在 Web 端注册，请在浏览器中使用。');
+      return;
+    }
+    await createUserWithEmailAndPassword(auth, email, password);
+  }, []);
+
   const logout = useCallback(async () => {
     if (!auth) return;
     await signOut(auth);
   }, []);
 
-  const value = useMemo<AuthCtx>(() => ({ user, loading, signInWithGoogle, logout }), [user, loading, signInWithGoogle, logout]);
+  const value = useMemo<AuthCtx>(
+    () => ({ user, loading, signInWithGoogle, signInWithEmail, signUpWithEmail, logout }),
+    [user, loading, signInWithGoogle, signInWithEmail, signUpWithEmail, logout]
+  );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 };
 
