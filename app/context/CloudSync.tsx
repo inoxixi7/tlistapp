@@ -26,6 +26,16 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
   const listsRef = useRef<TravelList[]>([]);
   const isApplyingFromCloud = useRef(false);
   const prevIdsRef = useRef<Set<string>>(new Set());
+  // 初始基线：首次 snapshot 建立后才允许执行删除逻辑
+  const baselineEstablishedRef = useRef(false);
+  const baselineRemoteIdsRef = useRef<Set<string>>(new Set());
+  // 删除保护：基线后延迟一段时间才允许真正删除云端
+  const allowDeletionRef = useRef(false);
+  const deletionEnableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 记录每个 list 上次成功上传的 updatedAt，避免重复写入
+  const lastUploadedMapRef = useRef<Map<string, number>>(new Map());
+  // 节流定时器引用
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const upsertRef = useRef(upsertList);
   const clearAllRef = useRef(clearAll);
 
@@ -101,14 +111,28 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
                     )
                   )
                 );
+                // 基线：云端无 -> 记录本地（可能为空）
+                baselineRemoteIdsRef.current = new Set(currentLists.map((l) => l.id));
               } else {
                 // 云端有数据 -> 用云覆盖本地（简单粗暴）
                 clearAllRef.current();
+                const remoteIds: string[] = [];
                 snap.forEach((d) => {
                   const data = d.data() as TravelList;
-                  if (data && data.id) upsertRef.current(data);
+                  if (data && data.id) {
+                    remoteIds.push(data.id);
+                    upsertRef.current(data);
+                  }
                 });
+                baselineRemoteIdsRef.current = new Set(remoteIds);
               }
+              baselineEstablishedRef.current = true; // 首次 snapshot 处理完毕
+              // 基线后将 prevIds 设为当前（云端或本地上传后的）集合，避免被视为“删除”
+              prevIdsRef.current = new Set(listsRef.current.map((l) => l.id));
+              // 延迟启用删除（3 秒窗口避免用户刚进入时本地尚未合并完全）
+              if (deletionEnableTimerRef.current) clearTimeout(deletionEnableTimerRef.current);
+              allowDeletionRef.current = false;
+              deletionEnableTimerRef.current = setTimeout(() => { allowDeletionRef.current = true; }, 3000);
             } else {
               // 非首次：增量应用云端变化（这里只是覆盖式 upsert）
               snap.forEach((d) => {
@@ -134,53 +158,81 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
     };
   }, [user]);
 
-  // 监听本地 lists 变化并上传到云（登录状态下）
-  useEffect(() => {
+  // 执行实际上传（差异 + 删除），被节流调度
+  const performUpload = React.useCallback(async () => {
     if (!user || !db) return;
-  if (isApplyingFromCloud.current) return; // 避免处理云端驱动的本地更新
-  // 首次引导（bootstrapped=false）期间禁止任何上传/删除，防止用“空本地”覆盖云端
-  if (!bootstrapped.current) return;
+    if (isApplyingFromCloud.current) return;
+    if (!bootstrapped.current) return;
     const uid = user.uid;
     const listsCol = collection(db, 'users', uid, 'lists');
-    (async () => {
-      try {
-        const currentLists = listsRef.current;
-        // 先处理删除：找出上一次存在但当前已不存在的 ID
-        const prevIds = prevIdsRef.current;
-        const currentIds = new Set(currentLists.map((l) => l.id));
-        const removedIds: string[] = [];
+    try {
+      const currentLists = listsRef.current;
+      const prevIds = prevIdsRef.current;
+      const currentIds = new Set(currentLists.map((l) => l.id));
+      const removedIds: string[] = [];
+      // 仅在基线建立且初始远程不为空时允许删除，避免本地空初始态误删云端
+  if (allowDeletionRef.current && baselineEstablishedRef.current && baselineRemoteIdsRef.current.size > 0) {
         prevIds.forEach((id) => { if (!currentIds.has(id)) removedIds.push(id); });
+      }
 
-        if (removedIds.length > 0) {
-          await Promise.all(
-            removedIds.map((id) => deleteDoc(doc(listsCol, id)).catch((e) => {
-              console.warn('[CloudSync] delete cloud doc failed', id, e);
-            }))
-          );
+      if (removedIds.length > 0) {
+        await Promise.all(
+          removedIds.map((id) => deleteDoc(doc(listsCol, id)).catch((e) => {
+            console.warn('[CloudSync] delete cloud doc failed', id, e);
+          }))
+        );
+        // 删除后亦需从 lastUploadedMap 中移除
+        const map = lastUploadedMapRef.current;
+        removedIds.forEach((id) => map.delete(id));
+      }
+
+      const map = lastUploadedMapRef.current;
+      const toUpload: TravelList[] = [];
+      for (const l of currentLists) {
+        if (typeof l.updatedAt !== 'number') continue;
+        const lastUploadedTs = map.get(l.id) || 0;
+        // 仅当 updatedAt 大于上次成功上传（或云应用时间，以更严格标准）才上传
+        if (l.updatedAt > lastUploadedTs && l.updatedAt > lastCloudApplyTs.current) {
+          toUpload.push(l);
         }
-
-        const toUpload = currentLists.filter((l) => typeof l.updatedAt === 'number' && l.updatedAt > lastCloudApplyTs.current);
-        if (toUpload.length === 0) return;
+      }
+      if (toUpload.length > 0) {
         await Promise.all(
           toUpload.map((l) =>
             setDoc(
               doc(listsCol, l.id),
-              {
-                ...l,
-                _syncedAt: serverTimestamp(),
-              },
+              { ...l, _syncedAt: serverTimestamp() },
               { merge: true }
-            )
+            ).then(() => {
+              lastUploadedMapRef.current.set(l.id, l.updatedAt);
+            }).catch((e) => {
+              console.warn('[CloudSync] setDoc failed', l.id, e);
+            })
           )
         );
-      } catch (e) {
-        showPermError(e);
-      } finally {
-        // 更新 prevIds 快照
-        prevIdsRef.current = new Set(listsRef.current.map((l) => l.id));
       }
-    })();
-  }, [user, lists.length]);
+    } catch (e) {
+      showPermError(e);
+    } finally {
+      prevIdsRef.current = new Set(listsRef.current.map((l) => l.id));
+    }
+  }, [user]);
+
+  // 监听本地 lists 变化并节流上传
+  useEffect(() => {
+    if (!user || !db) return;
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    // 500ms 无进一步变更才执行上传
+    debounceTimerRef.current = setTimeout(() => {
+      performUpload();
+    }, 500);
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
+  }, [user, lists, performUpload]);
 
   return <>{children}</>;
 };
