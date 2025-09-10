@@ -3,7 +3,7 @@ import { db } from '@/app/lib/firebase';
 import { useFocusEffect } from '@react-navigation/native';
 import { Link, useRouter } from 'expo-router';
 import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useList } from '../context/ListContext';
@@ -161,6 +161,92 @@ export default function HomeScreen() {
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   };
 
+  // --- Weather integration ---
+  // 简单映射：如果目的地包含特定关键词，映射到 Japan 気象庁 office code。
+  // 可根据需要扩展成一个更完整的表或调用 /api/cities/search。
+  const officeCodeForDestination = (dest?: string): string | null => {
+    if (!dest) return null;
+    const d = dest.toLowerCase();
+  if (d.includes('東京') || d.includes('tokyo') || d.includes('東京都')) return '130000';
+  if (d.includes('大阪') || d.includes('osaka')) return '270000';
+  if (d.includes('名古屋') || d.includes('nagoya')) return '230000';
+    if (d.includes('札幌') || d.includes('sapporo') || d.includes('北海道')) return '016000';
+  if (d.includes('福岡') || d.includes('fukuoka')) return '400000';
+    if (d.includes('京都') || d.includes('kyoto')) return '260000';
+    if (d.includes('沖縄') || d.includes('okinawa')) return '471000';
+    return null; // 未匹配
+  };
+
+  const weatherEmoji = (telop?: string): string => {
+    if (!telop || typeof telop !== 'string') return '';
+    const t = telop.replace(/\s+/g, '');
+    // 优先级从强天气到基本天气
+    if (/雷/.test(t)) return '⛈️';
+    if (/猛暑|熱/.test(t)) return '🥵';
+    if (/雪/.test(t)) return '❄️';
+    if (/雨/.test(t)) return '🌧️';
+    if (/晴/.test(t)) return '☀️';
+    if (/くもり|曇/.test(t)) return '☁️';
+    return '🌤️';
+  };
+
+  // 天气缓存：按 listId 存储；添加时间戳和 officeCode 便于调试与跨卡片共享
+  type WeatherEntry = { loading: boolean; forecasts?: any[]; error?: string; fetchedAt?: number; officeCode?: string };
+  const [weatherMap, setWeatherMap] = useState<Record<string, WeatherEntry>>({});
+  const weatherRef = React.useRef(weatherMap);
+  useEffect(() => { weatherRef.current = weatherMap; }, [weatherMap]);
+
+  // 将多个 list 按 office code 分组，一次请求复用，避免仅首条被触发的问题
+  useEffect(() => {
+    if (!lists.length) return;
+    const now = Date.now();
+    const CACHE_TTL_MS_LOCAL = 30 * 60 * 1000; // 30 分钟
+    const codeGroups: Record<string, string[]> = {}; // officeCode -> listIds
+    const toInit: Record<string, WeatherEntry> = {};
+    lists.forEach((l) => {
+      const code = officeCodeForDestination(l.destination);
+      if (!code) return;
+      const existing = weatherRef.current[l.id];
+  if (existing && existing.fetchedAt && (now - existing.fetchedAt) < CACHE_TTL_MS_LOCAL && (existing.forecasts || existing.error)) {
+        // 仍然有效，不刷新
+        return;
+      }
+      if (!codeGroups[code]) codeGroups[code] = [];
+      codeGroups[code].push(l.id);
+      if (!existing || !existing.loading) {
+        toInit[l.id] = { loading: true, officeCode: code };
+      }
+    });
+    if (Object.keys(codeGroups).length === 0) return;
+    if (Object.keys(toInit).length) {
+      setWeatherMap((prev) => ({ ...prev, ...toInit }));
+    }
+    Object.entries(codeGroups).forEach(([code, listIds]) => {
+      fetch(`https://weatherapi-92so.onrender.com/api/forecast/office/${code}`)
+        .then(async (res) => {
+          if (!res.ok) throw new Error('weather_http');
+          const data = await res.json();
+          const forecasts: any[] = Array.isArray(data?.forecasts) ? data.forecasts : [];
+          setWeatherMap((prev) => {
+            const next = { ...prev };
+            listIds.forEach((id) => {
+              next[id] = { loading: false, forecasts, fetchedAt: Date.now(), officeCode: code };
+            });
+            return next;
+          });
+        })
+        .catch(() => {
+          setWeatherMap((prev) => {
+            const next = { ...prev };
+            listIds.forEach((id) => {
+              next[id] = { loading: false, error: '取得失敗', fetchedAt: Date.now(), officeCode: code };
+            });
+            return next;
+          });
+        });
+    });
+  }, [lists]);
+
   return (
     <View style={styles.container}>
       {/* <Text style={styles.title}>マイ旅行リスト</Text> */}
@@ -200,7 +286,90 @@ export default function HomeScreen() {
               )}
 
               <Pressable onPress={() => handleEdit(l.id)}>
-                <Text style={styles.cardInfo}>目的地: {l.destination || '未入力'}</Text>
+                <Text style={styles.cardInfo}>
+                  目的地: {l.destination || '未入力'}
+                  {(() => {
+                    if (!l.destination) return null;
+                    const w = weatherMap[l.id];
+                    if (!w) return <Text style={styles.weatherText}> 天気:取得中…</Text>;
+                    if (w.loading) return <Text style={styles.weatherText}> 天気:取得中…</Text>;
+                    if (w.error) return <Text style={[styles.weatherText, { color: '#d00' }]}> 天気:取得失敗</Text>;
+                    if (!Array.isArray(w.forecasts) || !w.forecasts.length) {
+                      return <Text style={styles.weatherText}> 天気:データなし</Text>;
+                    }
+                    // 行程第一天（多来源回退）
+                    const rawStart = l.originalParams?.startDate || (l as any).startDate || (l as any).tripStart;
+                    // 允许包含 年/月/日 等字符，提取数字
+                    let startDateStr = formatDateYmd(rawStart);
+                    if (startDateStr === '未输入' && typeof rawStart === 'string') {
+                      const m = rawStart.match(/(\d{4}).*?(\d{1,2}).*?(\d{1,2})/);
+                      if (m) {
+                        const y = m[1];
+                        const mo = m[2].padStart(2, '0');
+                        const da = m[3].padStart(2, '0');
+                        startDateStr = `${y}-${mo}-${da}`;
+                      }
+                    }
+                    if (!startDateStr || startDateStr === '未入力') return null;
+                    // 取 forecasts 中 date 与 startDateStr 匹配的条目（比较 YYYY-MM-DD）
+                    const startDateObj = parseDateSafe(startDateStr);
+                    let entry = w.forecasts.find((f: any) => typeof f?.date === 'string' && f.date.slice(0, 10) === startDateStr);
+                    // 若没有精确匹配，选择与 startDate 天数差最小的一条（绝对差 <=1 天）
+                    if (!entry && startDateObj) {
+                      const candidates = w.forecasts
+                        .map((f: any) => {
+                          if (typeof f?.date !== 'string') return null;
+                          const d = new Date(f.date);
+                          if (isNaN(d.getTime())) return null;
+                          const diffDays = Math.round((d.getTime() - startDateObj.getTime()) / 86400000);
+                          return { f, diff: Math.abs(diffDays) };
+                        })
+                        .filter(Boolean)
+                        .sort((a: any, b: any) => a.diff - b.diff);
+                      if (candidates.length && candidates[0]!.diff <= 1) entry = candidates[0]!.f;
+                    }
+                    // 若未匹配且 startDate 是今天，则回退第一条（部分接口今日第一条 date 可能不含 00:00）
+                    if (!entry) {
+                      const now = new Date();
+                      const pad2 = (n: number) => n.toString().padStart(2, '0');
+                      const todayYmd = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+                      if (startDateStr === todayYmd) entry = w.forecasts[0];
+                    }
+                    if (!entry) return null; // 无该日气象信息
+                    const telop: string | undefined = entry?.telop;
+                    let minC = entry?.temperature?.min?.celsius;
+                    let maxC = entry?.temperature?.max?.celsius;
+                    // 若当前预报无温度，尝试找下一条有温度的数据
+                    if ((!minC && !maxC) && Array.isArray(w.forecasts)) {
+                      const alt = w.forecasts.find((f: any) => f !== entry && (f?.temperature?.min?.celsius || f?.temperature?.max?.celsius));
+                      if (alt) {
+                        minC = alt?.temperature?.min?.celsius || minC;
+                        maxC = alt?.temperature?.max?.celsius || maxC;
+                      }
+                    }
+                    const cor = entry?.chanceOfRain || {};
+                    const nums = Object.values(cor)
+                      .filter((v: any) => typeof v === 'string' && v !== '--')
+                      .map((s: any) => parseInt(s, 10))
+                      .filter((n: any) => !isNaN(n));
+                    const rain = nums.length ? Math.max(...nums) : null;
+                    if (!telop && minC == null && maxC == null && rain == null) {
+                      return <Text style={styles.weatherText}> 天気:情報なし</Text>;
+                    }
+                    const parts: string[] = [];
+                    if (telop) parts.push(`${weatherEmoji(telop)}${telop.slice(0, 8)}${telop.length > 8 ? '…' : ''}`);
+                    const haveTemp = (minC && minC !== 'null') || (maxC && maxC !== 'null');
+                    if (haveTemp) {
+                      const range = [minC, maxC].filter(Boolean).join('~');
+                      parts.push(`気温:${range}°C`);
+                    } else {
+                      parts.push('気温:--');
+                    }
+                    if (rain != null) parts.push(`降水:${rain}%`);
+                    if (!parts.length) return null;
+                    return <Text style={styles.weatherText}> {parts.join(' / ')}</Text>;
+                  })()}
+                </Text>
                 <Text style={styles.cardInfo}>人数: 大人{l.adults}名・子ども{l.children}名</Text>
                 <Text style={styles.cardInfo}>期間: {formatDateYmd(l.originalParams?.startDate)} 〜 {formatDateYmd(l.originalParams?.endDate)}</Text>
                 {/* 进度条 */}
@@ -362,5 +531,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  weatherText: {
+    fontSize: 14,
+    color: '#444',
   },
 });
