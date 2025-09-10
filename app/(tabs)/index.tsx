@@ -337,14 +337,28 @@ export default function HomeScreen() {
                     }
                     if (!entry) return null; // 无该日气象信息
                     const telop: string | undefined = entry?.telop;
-                    let minC = entry?.temperature?.min?.celsius;
-                    let maxC = entry?.temperature?.max?.celsius;
-                    // 若当前预报无温度，尝试找下一条有温度的数据
-                    if ((!minC && !maxC) && Array.isArray(w.forecasts)) {
-                      const alt = w.forecasts.find((f: any) => f !== entry && (f?.temperature?.min?.celsius || f?.temperature?.max?.celsius));
+                    // 宽松解析温度：允许 null / '--' / 数字 / 字符串数字
+                    const normVal = (v: any) => {
+                      if (v == null) return undefined;
+                      if (typeof v === 'object' && 'celsius' in v) return normVal((v as any).celsius);
+                      if (typeof v === 'string') {
+                        if (v.trim() === '' || v === '--' || v.toLowerCase() === 'null') return undefined;
+                        const n = Number(v);
+                        return isFinite(n) ? n : undefined;
+                      }
+                      if (typeof v === 'number' && isFinite(v)) return v;
+                      return undefined;
+                    };
+                    let minC = normVal(entry?.temperature?.min);
+                    let maxC = normVal(entry?.temperature?.max);
+                    if ((minC === undefined && maxC === undefined) && Array.isArray(w.forecasts)) {
+                      const alt = w.forecasts.find((f: any) => {
+                        if (f === entry) return false;
+                        return normVal(f?.temperature?.min) !== undefined || normVal(f?.temperature?.max) !== undefined;
+                      });
                       if (alt) {
-                        minC = alt?.temperature?.min?.celsius || minC;
-                        maxC = alt?.temperature?.max?.celsius || maxC;
+                        minC = normVal(alt?.temperature?.min);
+                        maxC = normVal(alt?.temperature?.max);
                       }
                     }
                     const cor = entry?.chanceOfRain || {};
@@ -357,13 +371,20 @@ export default function HomeScreen() {
                       return <Text style={styles.weatherText}> 天気:情報なし</Text>;
                     }
                     const parts: string[] = [];
-                    if (telop) parts.push(`${weatherEmoji(telop)}${telop.slice(0, 8)}${telop.length > 8 ? '…' : ''}`);
-                    const haveTemp = (minC && minC !== 'null') || (maxC && maxC !== 'null');
-                    if (haveTemp) {
-                      const range = [minC, maxC].filter(Boolean).join('~');
-                      parts.push(`気温:${range}°C`);
-                    } else {
+                    if (telop) {
+                      // 去除半角/全角空格以紧凑显示（例如 “くもり　時々　雨” -> “くもり時々雨”）
+                      const collapsed = telop.replace(/[\s\u3000]+/g, '');
+                      const display = `${collapsed.slice(0, 8)}${collapsed.length > 8 ? '…' : ''}`;
+                      parts.push(`${weatherEmoji(telop)}${display}`);
+                    }
+                    if (minC === undefined && maxC === undefined) {
                       parts.push('気温:--');
+                    } else if (minC !== undefined && maxC !== undefined) {
+                      parts.push(`気温:${minC}~${maxC}°C`);
+                    } else if (maxC !== undefined) {
+                      parts.push(`最高気温:${maxC}°C`);
+                    } else if (minC !== undefined) {
+                      parts.push(`最低気温:${minC}°C`);
                     }
                     if (rain != null) parts.push(`降水:${rain}%`);
                     if (!parts.length) return null;
@@ -535,5 +556,6 @@ const styles = StyleSheet.create({
   weatherText: {
     fontSize: 14,
     color: '#444',
+    marginLeft: 8, // 与目的地文字保持间距
   },
 });
