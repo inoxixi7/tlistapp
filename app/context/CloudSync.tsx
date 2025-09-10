@@ -75,6 +75,8 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
 
       // 为新的订阅重置引导标志
       bootstrapped.current = false;
+  // 重置上一位用户残留的 prevIds，避免在首次 snapshot 前触发“本地缺失=云端删除”
+  prevIdsRef.current = new Set();
 
       // 简化：拉取 lists 子集合的一个 onSnapshot 后再决定初始化策略
       unsub = onSnapshot(
@@ -135,7 +137,9 @@ export const CloudSync: React.FC<{ children: React.ReactNode }> = ({ children })
   // 监听本地 lists 变化并上传到云（登录状态下）
   useEffect(() => {
     if (!user || !db) return;
-    if (isApplyingFromCloud.current) return; // 避免处理云端驱动的本地更新
+  if (isApplyingFromCloud.current) return; // 避免处理云端驱动的本地更新
+  // 首次引导（bootstrapped=false）期间禁止任何上传/删除，防止用“空本地”覆盖云端
+  if (!bootstrapped.current) return;
     const uid = user.uid;
     const listsCol = collection(db, 'users', uid, 'lists');
     (async () => {
