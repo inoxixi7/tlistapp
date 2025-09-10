@@ -355,7 +355,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'dodgerblue',
     paddingVertical: 15,
     paddingHorizontal: 30,
-    borderRadius: 25,
+    borderRadius: 20,
     marginTop: 20,
   },
   createButtonText: {

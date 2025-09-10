@@ -10,7 +10,7 @@ import { Stack, useRouter } from 'expo-router';
 import { deleteUser, updateProfile } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import React from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -159,7 +159,8 @@ export default function RegisterScreen() {
         }}
       />
       <View style={styles.card}>
-        <Text style={styles.title}>新規登録</Text>
+        {/* <Text style={styles.title}>新規登録</Text> */}
+        <Image source={require('@/assets/images/icon.png')} style={styles.appIcon} accessibilityLabel="App icon" />
         <TextInput
           style={styles.input}
           value={displayName}
@@ -311,8 +312,23 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 12,
+    marginBottom: 12,
+    flexDirection: 'row',
+    gap: 6,
+    backgroundColor: '#eee',
+
+
   },
   btnPrimary: { backgroundColor: 'dodgerblue' },
   btnTextLight: { color: '#fff', fontWeight: '700' },
   errorText: { color: '#e11900', marginBottom: 6 },
+  appIcon: {
+    width: 100,
+    height: 100,
+    alignSelf: 'center',
+    marginBottom: 16,
+    borderRadius: 16,
+    resizeMode: 'contain',
+  },
 });

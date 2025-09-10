@@ -206,7 +206,8 @@ export default function LoginScreen() {
         }}
       />
       <View style={styles.card}>
-        <Text style={styles.title}>ログイン</Text>
+        {/* <Text style={styles.title}>ログイン</Text> */}
+  <Image source={require('@/assets/images/icon.png')} style={styles.appIcon} accessibilityLabel="App icon" />
         <TextInput
           style={styles.input}
           value={email}
@@ -306,4 +307,12 @@ const styles = StyleSheet.create({
   btnTextDark: { color: '#1f2d3d', fontWeight: '700' },
   errorText: { color: '#e11900', marginBottom: 6 },
   infoText: { color: '#0b6e4f' },
+  appIcon: {
+    width: 100,
+    height: 100,
+    alignSelf: 'center',
+    marginBottom: 16,
+    borderRadius: 16,
+    resizeMode: 'contain',
+  },
 });
